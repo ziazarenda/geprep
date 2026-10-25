@@ -24,7 +24,6 @@ https://github.com/CGCookie/blender-addon-updater
 
 __version__ = "1.1.1"
 
-import errno
 import traceback
 import platform
 import ssl
@@ -36,6 +35,9 @@ import zipfile
 import shutil
 import threading
 import fnmatch
+import ntpath
+import stat
+from pathlib import Path
 from datetime import datetime, timedelta
 
 # Blender imports, used in limited cases.
@@ -43,6 +45,97 @@ import bpy
 import addon_utils
 
 __no_reg__ = True
+
+class _HTTPSOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Keep update requests on HTTPS, including redirects to release storage."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _require_https(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _require_https(url):
+    if urllib.parse.urlsplit(url).scheme.lower() != "https":
+        raise urllib.error.URLError("Updater requests require HTTPS")
+
+
+def _open_update_url(request):
+    """Verify certificates and hostnames, never retry with verification off."""
+    _require_https(request.full_url)
+    context = ssl.create_default_context()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPSHandler(context=context),
+        _HTTPSOnlyRedirectHandler())
+    return opener.open(request)
+
+
+def _validated_zip_members(archive, destination):
+    """Validate every member before extracting any of the update files."""
+    root = Path(destination).resolve()
+    members = []
+    seen = set()
+    reserved = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+    reserved.update(f"{prefix}{number}" for prefix in ("COM", "LPT")
+                    for number in "123456789¹²³")
+
+    for info in archive.infolist():
+        name = info.orig_filename
+        parts = name.rstrip("/").split("/")
+        # ZIP paths use forward slashes on every platform. Reject Windows
+        # drives, UNC/backslash paths, alternate streams and ambiguous names too.
+        if (not name or "\x00" in name or "\\" in name or name.startswith("/")
+                or ntpath.splitdrive(name)[0]
+                or any(part in ("", ".", "..") or ":" in part
+                       or part.endswith((".", " "))
+                       or part.split(".", 1)[0].upper() in reserved
+                       for part in parts)):
+            raise ValueError(f"Unsafe update ZIP path: {name!r}")
+
+        kind = stat.S_IFMT(info.external_attr >> 16)
+        if kind not in (0, stat.S_IFREG, stat.S_IFDIR):
+            raise ValueError(f"Unsupported update ZIP member type: {name!r}")
+        if (kind == stat.S_IFDIR and not info.is_dir()
+                or kind == stat.S_IFREG and info.is_dir()):
+            raise ValueError(f"Conflicting update ZIP member type: {name!r}")
+
+        # Preserve the updater's existing layout: strip the repository/add-on
+        # wrapper directory and ignore files directly at the archive root.
+        if len(parts) == 1:
+            continue
+        path = root.joinpath(*parts[1:]).resolve()
+        if path == root or root not in path.parents:
+            raise ValueError(f"Update ZIP path escapes extraction directory: {name!r}")
+        key = os.path.normcase(str(path))
+        if key in seen:
+            raise ValueError(f"Duplicate update ZIP destination: {name!r}")
+        seen.add(key)
+        members.append((info, path))
+
+    # Reject file/directory conflicts before a valid-looking early file is written.
+    files = {path for info, path in members if not info.is_dir()}
+    for info, path in members:
+        if any(parent in files for parent in path.parents):
+            raise ValueError(f"Update ZIP file used as a directory: {info.orig_filename!r}")
+    return members
+
+
+def _extract_update_zip(source, destination, log):
+    with zipfile.ZipFile(source, "r") as archive:
+        members = _validated_zip_members(archive, destination)
+        for info, path in members:
+            try:
+                if info.is_dir():
+                    path.mkdir(parents=True, exist_ok=True)
+                    log("Extract - mkdir: " + str(path))
+                else:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    with archive.open(info) as incoming, path.open("wb") as outgoing:
+                        shutil.copyfileobj(incoming, outgoing)
+                    log("Extract - create: " + str(path))
+            except Exception as error:
+                error.add_note(f"GEPrep: failed to extract ZIP member {info.orig_filename!r}")
+                raise
+
 
 # -----------------------------------------------------------------------------
 # The main class
@@ -670,13 +763,6 @@ class SingletonUpdater:
     def get_raw(self, url):
         """All API calls to base url."""
         request = urllib.request.Request(url)
-        try:
-            context = ssl._create_unverified_context()
-        except:
-            # Some blender packaged python versions don't have this, largely
-            # useful for local network setups otherwise minimal impact.
-            context = None
-
         # Setup private request headers if appropriate.
         if self._engine.token is not None:
             if self._engine.name == "gitlab":
@@ -690,10 +776,7 @@ class SingletonUpdater:
 
         # Run the request.
         try:
-            if context:
-                result = urllib.request.urlopen(request, context=context)
-            else:
-                result = urllib.request.urlopen(request)
+            result = _open_update_url(request)
         except urllib.error.HTTPError as e:
             if str(e.code) == "403":
                 self._error = "HTTP error (access denied)"
@@ -777,7 +860,6 @@ class SingletonUpdater:
         self.print_verbose("Starting download update zip")
         try:
             request = urllib.request.Request(url)
-            context = ssl._create_unverified_context()
 
             # Setup private token if appropriate.
             if self._engine.token is not None:
@@ -791,8 +873,8 @@ class SingletonUpdater:
             request.add_header(
                 'User-Agent', "Python/" + str(platform.python_version()))
 
-            self.url_retrieve(urllib.request.urlopen(request, context=context),
-                              self._source_zip)
+            with _open_update_url(request) as response:
+                self.url_retrieve(response, self._source_zip)
             # Add additional checks on file size being non-zero.
             self.print_verbose("Successfully downloaded update zip")
             return True
@@ -912,42 +994,14 @@ class SingletonUpdater:
 
         self.print_verbose(
             "Begin extracting source from zip:" + str(self._source_zip))
-        with zipfile.ZipFile(self._source_zip, "r") as zfile:
-
-            if not zfile:
-                self._error = "Install failed"
-                self._error_msg = "Resulting file is not a zip, cannot extract"
-                self.print_verbose(self._error_msg)
-                return -1
-
-            # Now extract directly from the first subfolder (not root)
-            # this avoids adding the first subfolder to the path length,
-            # which can be too long if the download has the SHA in the name.
-            zsep = '/'  # Not using os.sep, always the / value even on windows.
-            for name in zfile.namelist():
-                if zsep not in name:
-                    continue
-                top_folder = name[:name.index(zsep) + 1]
-                if name == top_folder + zsep:
-                    continue  # skip top level folder
-                sub_path = name[name.index(zsep) + 1:]
-                if name.endswith(zsep):
-                    try:
-                        os.mkdir(os.path.join(outdir, sub_path))
-                        self.print_verbose(
-                            "Extract - mkdir: " + os.path.join(outdir, sub_path))
-                    except OSError as exc:
-                        if exc.errno != errno.EEXIST:
-                            self._error = "Install failed"
-                            self._error_msg = "Could not create folder from zip"
-                            self.print_trace()
-                            return -1
-                else:
-                    with open(os.path.join(outdir, sub_path), "wb") as outfile:
-                        data = zfile.read(name)
-                        outfile.write(data)
-                        self.print_verbose(
-                            "Extract - create: " + os.path.join(outdir, sub_path))
+        try:
+            _extract_update_zip(self._source_zip, outdir, self.print_verbose)
+        except (OSError, ValueError, RuntimeError, EOFError,
+                zipfile.BadZipFile, NotImplementedError) as error:
+            self._error = "Install failed"
+            self._error_msg = "Could not extract update ZIP: " + str(error)
+            self.print_trace()
+            return -1
 
         self.print_verbose("Extracted source")
 
@@ -959,8 +1013,11 @@ class SingletonUpdater:
             return -1
 
         if self._subfolder_path:
-            self._subfolder_path.replace('/', os.path.sep)
-            self._subfolder_path.replace('\\', os.path.sep)
+            candidate = (Path(unpath) / self._subfolder_path.replace("\\", "/")).resolve()
+            if candidate == Path(unpath).resolve() or Path(unpath).resolve() not in candidate.parents:
+                self._error = "Install failed"
+                self._error_msg = "Configured addon subfolder escapes extraction directory"
+                return -1
 
         # Either directly in root of zip/one subfolder, or use specified path.
         if not os.path.isfile(os.path.join(unpath, "__init__.py")):
