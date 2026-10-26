@@ -1,4 +1,87 @@
 import bpy
+import textwrap
+
+
+def draw_naming_results(layout, settings, context):
+    results = settings.naming_results
+
+    if not results:
+        return
+
+    box = layout.box()
+    box.prop(
+        settings,
+        "naming_results_expanded",
+        text=f"Last Naming Results ({len(results)})",
+        icon=(
+            "TRIA_DOWN"
+            if settings.naming_results_expanded
+            else "TRIA_RIGHT"
+        ),
+        emboss=False,
+    )
+
+    if not settings.naming_results_expanded:
+        return
+
+    box.label(text="Results from the last naming attempt")
+
+    icons = {
+        "CHANGED": "CHECKMARK",
+        "SKIPPED": "INFO",
+        "FAILED": "ERROR",
+        "INCOMPLETE": "ERROR",
+    }
+
+    labels = {
+        "CHANGED": "Renamed",
+        "SKIPPED": "Skipped",
+        "FAILED": "Failed",
+        "INCOMPLETE": "Recovery Failed",
+    }
+
+    for entry in results:
+        item = box.box()
+        item.alert = entry.status in {"FAILED", "INCOMPLETE"}
+
+        header = item.row(align=True)
+
+        name_row = header.row(align=True)
+        name_row.alignment = "LEFT"
+        name_row.prop(
+            entry,
+            "expanded",
+            text=entry.original_name,
+            icon="TRIA_DOWN" if entry.expanded else "TRIA_RIGHT",
+            emboss=False,
+        )
+
+        status_row = header.row(align=True)
+        status_row.alignment = "RIGHT"
+        status_row.label(
+            text=labels[entry.status],
+            icon=icons[entry.status],
+        )
+
+        if not entry.expanded:
+            continue
+
+        item.label(text=f"Before: {entry.original_name}")
+        item.label(text=f"After: {entry.resulting_name}")
+
+        if entry.message:
+            ui_scale = context.preferences.system.ui_scale
+            available_width = context.region.width / ui_scale - 48
+            characters_per_line = max(10, int(available_width / 7))
+
+            message_column = item.column(align=True)
+
+            for paragraph in entry.message.splitlines():
+                for line in textwrap.wrap(
+                    paragraph,
+                    width=characters_per_line,
+                ):
+                    message_column.label(text=line)
 
 
 class GEPREP_PT_naming(bpy.types.Panel):
@@ -45,6 +128,9 @@ class GEPREP_PT_naming(bpy.types.Panel):
         )
         button.action = "SUFFIX"
 
+        layout.separator()
+        draw_naming_results(layout, settings, context)
+
 
 class GEPREP_PT_prepare(bpy.types.Panel):
     bl_idname = "GEPREP_PT_prepare"
@@ -55,7 +141,27 @@ class GEPREP_PT_prepare(bpy.types.Panel):
     bl_order = 1
 
     def draw(self, context):
-        pass
+        layout = self.layout
+        settings = context.scene.geprep
+
+        layout.prop(settings, "prepare_include_children")
+        layout.prop(settings, "prepare_use_sm_prefix")
+        layout.prop(settings, "prepare_number_variants")
+        layout.prop(settings, "prepare_duplicate_materials")
+        layout.prop(settings, "prepare_apply_rotation_scale")
+
+        layout.separator()
+
+        row = layout.row()
+        row.scale_y = 1.5
+        row.operator("geprep.prepare_copy", text="Prepare Copy")
+
+        row = layout.row()
+        row.scale_y = 1.5
+        row.operator(
+            "geprep.remove_prepared_copies",
+            text="Remove Prepared Copies",
+        )
 
 
 class GEPREP_PT_modifiers(bpy.types.Panel):
