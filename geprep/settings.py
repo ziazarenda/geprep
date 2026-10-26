@@ -68,6 +68,31 @@ class GEPREP_PG_prepare_result(bpy.types.PropertyGroup):
     expanded: bpy.props.BoolProperty(default=False)
 
 
+class GEPREP_PG_modifier_preview(bpy.types.PropertyGroup):
+    object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
+    expanded: bpy.props.BoolProperty(default=False)
+
+
+class GEPREP_PG_modifier_result(bpy.types.PropertyGroup):
+    object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
+    object_name: bpy.props.StringProperty()
+
+    status: bpy.props.EnumProperty(
+        items=(
+            ("APPLIED", "Applied", ""),
+            ("SKIPPED", "Skipped", ""),
+            ("FAILED", "Failed", ""),
+            ("INCOMPLETE", "Recovery Failed", ""),
+        ),
+        default="SKIPPED",
+    )
+
+    applied: bpy.props.IntProperty(default=0, min=0)
+    disabled: bpy.props.IntProperty(default=0, min=0)
+    message: bpy.props.StringProperty()
+    expanded: bpy.props.BoolProperty(default=False)
+
+
 class GEPREP_PG_settings(bpy.types.PropertyGroup):
     name_base: bpy.props.StringProperty(
         name="Base Name",
@@ -137,6 +162,27 @@ class GEPREP_PG_settings(bpy.types.PropertyGroup):
 
     prepare_results_expanded: bpy.props.BoolProperty(
         name="Last Prepare Results",
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+
+    modifier_preview_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    modifier_previews: bpy.props.CollectionProperty(
+        type=GEPREP_PG_modifier_preview,
+        options={"SKIP_SAVE"},
+    )
+
+    modifier_results: bpy.props.CollectionProperty(
+        type=GEPREP_PG_modifier_result,
+        options={"SKIP_SAVE"},
+    )
+
+    modifier_results_expanded: bpy.props.BoolProperty(
         default=True,
         options={"SKIP_SAVE"},
     )
