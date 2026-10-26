@@ -29,6 +29,21 @@ def record_prepare_batch(settings, batch):
         entry.original_hidden = visibility[3]
 
 
+def store_prepare_results(settings, records, status, message):
+    """Replace the last report with snapshots of this operation."""
+    settings.prepare_results.clear()
+    settings.prepare_results_expanded = True
+
+    for source, copy_name, duplicate in records:
+        entry = settings.prepare_results.add()
+        entry.source = source
+        entry.duplicate = duplicate
+        entry.original_name = source.name if source else "(Missing original)"
+        entry.copy_name = copy_name
+        entry.status = status
+        entry.message = message
+
+
 class GEPREP_OT_prepare_copy(bpy.types.Operator):
     """Create prepared copies and hide their originals. Supports Undo."""
 
@@ -47,6 +62,12 @@ class GEPREP_OT_prepare_copy(bpy.types.Operator):
     def execute(self, context):
         settings = context.scene.geprep
 
+        # Keep source references for reporting if preparation fails.
+        failure_records = [
+            (obj, "", None)
+            for obj in context.selected_objects
+        ]
+
         try:
             batch = prepare_assets(
                 context,
@@ -59,33 +80,65 @@ class GEPREP_OT_prepare_copy(bpy.types.Operator):
 
         except PrepareRecoveryError as error:
             traceback.print_exc()
+            store_prepare_results(
+                settings,
+                failure_records,
+                "INCOMPLETE",
+                str(error),
+            )
             self.report({"ERROR"}, str(error))
-
-            # Recovery was incomplete. Preserve Undo.
             return {"FINISHED"}
 
         except ValueError as error:
+            store_prepare_results(
+                settings,
+                failure_records,
+                "SKIPPED",
+                str(error),
+            )
             self.report({"WARNING"}, str(error))
             return {"CANCELLED"}
 
         except Exception as error:
             traceback.print_exc()
+            store_prepare_results(
+                settings,
+                failure_records,
+                "FAILED",
+                f"No prepared copies kept. {error}",
+            )
             self.report({"ERROR"}, f"Prepare failed: {error}")
             return {"CANCELLED"}
+
+        records = [
+            (source, duplicate.name, duplicate)
+            for source, duplicate in batch["copies"].items()
+        ]
 
         try:
             record_prepare_batch(settings, batch)
 
         except Exception as error:
             traceback.print_exc()
-            self.report(
-                {"ERROR"},
+            message = (
                 f"Copies were prepared, but recording their restoration "
-                f"data failed: {error}. Use Undo before continuing",
+                f"data failed: {error}. Use Undo before continuing"
             )
-
-            # Preparation already changed the scene. Preserve Undo.
+            store_prepare_results(
+                settings,
+                records,
+                "INCOMPLETE",
+                message,
+            )
+            self.report({"ERROR"}, message)
             return {"FINISHED"}
+
+        store_prepare_results(
+            settings,
+            records,
+            "PREPARED",
+            "Working copy created. Original hidden",
+        )
 
         meshes = sum(
             source.type == "MESH"
@@ -98,7 +151,6 @@ class GEPREP_OT_prepare_copy(bpy.types.Operator):
             f"Prepared {meshes} mesh copies and {empties} Empty copies. "
             "Originals hidden",
         )
-
         return {"FINISHED"}
 
 
@@ -121,22 +173,49 @@ class GEPREP_OT_remove_prepared_copies(bpy.types.Operator):
         )
 
     def execute(self, context):
-        try:
-            removed = remove_last_prepare_batch(
-                context,
-                context.scene.geprep.prepare_batches,
+        settings = context.scene.geprep
+        batches = settings.prepare_batches
+
+        # Snapshot names before removal invalidates the copy references.
+        records = [
+            (
+                entry.source,
+                entry.duplicate.name if entry.duplicate else "",
+                None,
             )
+            for entry in batches[-1].entries
+        ] if batches else []
+
+        try:
+            removed = remove_last_prepare_batch(context, batches)
 
         except ValueError as error:
+            store_prepare_results(
+                settings,
+                records,
+                "SKIPPED",
+                str(error),
+            )
             self.report({"WARNING"}, str(error))
             return {"CANCELLED"}
 
         except PrepareRecoveryError as error:
             traceback.print_exc()
+            store_prepare_results(
+                settings,
+                records,
+                "INCOMPLETE",
+                str(error),
+            )
             self.report({"ERROR"}, str(error))
-
-            # Changes may already have happened. Preserve Undo.
             return {"FINISHED"}
+
+        store_prepare_results(
+            settings,
+            records,
+            "RESTORED",
+            "Prepared copy removed if present. Original visibility restored",
+        )
 
         self.report(
             {"INFO"},

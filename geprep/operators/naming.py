@@ -9,6 +9,15 @@ from ..operations.naming import (
 )
 
 
+def record_naming_result(results, obj, original_name, status, message=""):
+    entry = results.add()
+    entry.object_ref = obj
+    entry.original_name = original_name
+    entry.resulting_name = obj.name
+    entry.status = status
+    entry.message = message
+
+
 class GEPREP_OT_rename_objects(bpy.types.Operator):
     """Rename selected objects. Supports Undo."""
 
@@ -38,19 +47,18 @@ class GEPREP_OT_rename_objects(bpy.types.Operator):
         settings = context.scene.geprep
         selected = list(context.selected_objects)
 
-        objects = {
-            obj.name: obj
-            for obj in selected
-            if obj.library is None
-            and obj.override_library is None
-            and obj.is_editable
-        }
+        objects = {}
+        excluded = []
 
-        skipped = len(selected) - len(objects)
-
-        if not objects:
-            self.report({"WARNING"}, "Select editable local objects")
-            return {"CANCELLED"}
+        for obj in selected:
+            if obj.library is not None:
+                excluded.append((obj, "This object is linked. Make it local first"))
+            elif obj.override_library is not None:
+                excluded.append((obj, "This object is a library override. Use a local copy"))
+            elif not obj.is_editable:
+                excluded.append((obj, "This object cannot be edited"))
+            else:
+                objects[obj.name] = obj
 
         try:
             plans = plan_renames(
@@ -69,43 +77,72 @@ class GEPREP_OT_rename_objects(bpy.types.Operator):
             self.report({"WARNING"}, str(error))
             return {"CANCELLED"}
 
-        changed = 0
-        failed = 0
+        results = settings.naming_results
+        results.clear()
+        settings.naming_results_expanded = True
 
-        for index, plan in enumerate(plans):
-            if plan["status"] != "CHANGED":
-                skipped += 1
-                continue
+        for obj, message in excluded:
+            record_naming_result(
+                results, obj, obj.name, "SKIPPED", message
+            )
 
+        stopped = False
+
+        for plan in plans:
             obj = objects[plan["old"]]
+            status = plan["status"]
+            message = plan["message"]
 
-            try:
-                assign_object_name(obj, plan["new"])
-
-            except RenameRecoveryError as error:
-                traceback.print_exc()
-                self.report({"ERROR"}, str(error))
-
-                # Stop if recovery failed. Remaining objects are untouched.
-                failed += 1
-                skipped += len(plans) - index - 1
-                break
-
-            except Exception as error:
-                traceback.print_exc()
-                self.report(
-                    {"WARNING"},
-                    f"Could not rename {plan['old']!r}: {error}",
+            if stopped:
+                status = "SKIPPED"
+                message = (
+                    "Not renamed. Stopped because the previous object's "
+                    "original name could not be restored"
                 )
-                failed += 1
 
-            else:
-                changed += 1
+            elif status == "CHANGED":
+                try:
+                    assign_object_name(obj, plan["new"])
 
-        self.report(
-            {"WARNING"} if failed else {"INFO"},
-            f"Naming: {changed} renamed, {skipped} skipped, {failed} failed",
+                except RenameRecoveryError as error:
+                    traceback.print_exc()
+                    status = "INCOMPLETE"
+                    message = str(error)
+                    stopped = True
+
+                except Exception as error:
+                    traceback.print_exc()
+                    status = "FAILED"
+                    message = str(error)
+
+            record_naming_result(
+                results,
+                obj,
+                plan["old"],
+                status,
+                message,
+            )
+
+        changed = sum(entry.status == "CHANGED" for entry in results)
+        skipped = sum(entry.status == "SKIPPED" for entry in results)
+        failed = sum(entry.status == "FAILED" for entry in results)
+        incomplete = sum(entry.status == "INCOMPLETE" for entry in results)
+
+        severity = (
+            {"ERROR"} if incomplete
+            else {"WARNING"} if failed
+            else {"INFO"}
         )
+
+        summary = (
+            f"Naming: {changed} renamed, {skipped} skipped, "
+            f"{failed} failed, {incomplete} incomplete"
+        )
+
+        if incomplete:
+            summary += ". Use Undo before continuing"
+
+        self.report(severity, summary)
 
         # Preserve Undo even if some renames failed after others succeeded.
         return {"FINISHED"}

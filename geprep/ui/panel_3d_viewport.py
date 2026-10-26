@@ -1,6 +1,20 @@
 import bpy
 import textwrap
 
+from ..operators.navigation import can_frame_object
+
+
+def draw_result_focus_button(layout, context, target):
+    row = layout.row(align=True)
+    row.enabled = can_frame_object(context, target)
+
+    button = row.operator(
+        "geprep.select_frame_object",
+        text="",
+        icon="VIEWZOOM",
+    )
+    button.object_key = str(target.as_pointer()) if target is not None else ""
+
 
 def draw_naming_results(layout, settings, context):
     results = settings.naming_results
@@ -61,6 +75,14 @@ def draw_naming_results(layout, settings, context):
         status_row.label(
             text=labels[entry.status],
             icon=icons[entry.status],
+        )
+
+        status_row.separator(factor=1.6)
+
+        draw_result_focus_button(
+            status_row,
+            context,
+            entry.object_ref,
         )
 
         if not entry.expanded:
@@ -132,6 +154,102 @@ class GEPREP_PT_naming(bpy.types.Panel):
         draw_naming_results(layout, settings, context)
 
 
+def draw_prepare_results(layout, settings, context):
+    results = settings.prepare_results
+
+    if not results:
+        return
+
+    box = layout.box()
+    box.prop(
+        settings,
+        "prepare_results_expanded",
+        text=f"Last Prepare Results ({len(results)})",
+        icon=(
+            "TRIA_DOWN"
+            if settings.prepare_results_expanded
+            else "TRIA_RIGHT"
+        ),
+        emboss=False,
+    )
+
+    if not settings.prepare_results_expanded:
+        return
+
+    box.label(text="Results from the last Prepare action")
+
+    icons = {
+        "PREPARED": "CHECKMARK",
+        "RESTORED": "CHECKMARK",
+        "SKIPPED": "INFO",
+        "FAILED": "ERROR",
+        "INCOMPLETE": "ERROR",
+    }
+
+    labels = {
+        "PREPARED": "Prepared",
+        "RESTORED": "Restored",
+        "SKIPPED": "Skipped",
+        "FAILED": "Failed",
+        "INCOMPLETE": "Recovery Failed",
+    }
+
+    for entry in results:
+        item = box.box()
+        item.alert = entry.status in {"FAILED", "INCOMPLETE"}
+
+        header = item.row(align=True)
+
+        name_row = header.row(align=True)
+        name_row.alignment = "LEFT"
+        name_row.prop(
+            entry,
+            "expanded",
+            text=entry.original_name,
+            icon="TRIA_DOWN" if entry.expanded else "TRIA_RIGHT",
+            emboss=False,
+        )
+
+        status_row = header.row(align=True)
+        status_row.alignment = "RIGHT"
+        status_row.label(
+            text=labels[entry.status],
+            icon=icons[entry.status],
+        )
+
+        target = (
+            entry.duplicate
+            if entry.duplicate is not None
+            else entry.source
+        )
+
+        status_row.separator(factor=1.6)
+
+        draw_result_focus_button(status_row, context, target)
+
+        if not entry.expanded:
+            continue
+
+        item.label(text=f"Original: {entry.original_name}")
+
+        if entry.copy_name:
+            item.label(text=f"Copy: {entry.copy_name}")
+
+        if entry.message:
+            ui_scale = context.preferences.system.ui_scale
+            available_width = context.region.width / ui_scale - 48
+            characters_per_line = max(10, int(available_width / 7))
+
+            message_column = item.column(align=True)
+
+            for paragraph in entry.message.splitlines():
+                for line in textwrap.wrap(
+                    paragraph,
+                    width=characters_per_line,
+                ):
+                    message_column.label(text=line)
+
+
 class GEPREP_PT_prepare(bpy.types.Panel):
     bl_idname = "GEPREP_PT_prepare"
     bl_label = "Prepare"
@@ -162,6 +280,9 @@ class GEPREP_PT_prepare(bpy.types.Panel):
             "geprep.remove_prepared_copies",
             text="Remove Prepared Copies",
         )
+
+        layout.separator()
+        draw_prepare_results(layout, settings, context)
 
 
 class GEPREP_PT_modifiers(bpy.types.Panel):

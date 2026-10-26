@@ -46,6 +46,28 @@ class GEPREP_PG_prepare_batch(bpy.types.PropertyGroup):
     view_layer: bpy.props.StringProperty()
 
 
+class GEPREP_PG_prepare_result(bpy.types.PropertyGroup):
+    source: bpy.props.PointerProperty(type=bpy.types.Object)
+    duplicate: bpy.props.PointerProperty(type=bpy.types.Object)
+
+    original_name: bpy.props.StringProperty()
+    copy_name: bpy.props.StringProperty()
+
+    status: bpy.props.EnumProperty(
+        items=(
+            ("PREPARED", "Prepared", ""),
+            ("RESTORED", "Restored", ""),
+            ("SKIPPED", "Skipped", ""),
+            ("FAILED", "Failed", ""),
+            ("INCOMPLETE", "Recovery Failed", ""),
+        ),
+        default="SKIPPED",
+    )
+
+    message: bpy.props.StringProperty()
+    expanded: bpy.props.BoolProperty(default=False)
+
+
 class GEPREP_PG_settings(bpy.types.PropertyGroup):
     name_base: bpy.props.StringProperty(
         name="Base Name",
@@ -106,6 +128,17 @@ class GEPREP_PG_settings(bpy.types.PropertyGroup):
 
     prepare_batches: bpy.props.CollectionProperty(
         type=GEPREP_PG_prepare_batch,
+    )
+
+    prepare_results: bpy.props.CollectionProperty(
+        type=GEPREP_PG_prepare_result,
+        options={"SKIP_SAVE"},
+    )
+
+    prepare_results_expanded: bpy.props.BoolProperty(
+        name="Last Prepare Results",
+        default=True,
+        options={"SKIP_SAVE"},
     )
 
 
