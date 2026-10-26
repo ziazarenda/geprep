@@ -4,6 +4,24 @@ import textwrap
 from ..operators.navigation import can_frame_object
 
 
+def draw_result_details_toggle(layout, context, section, index, text):
+    ui = context.window_manager.geprep_ui
+    key = f"{context.scene.session_uid}:{section}:{index}"
+
+    entry = ui.result_foldouts.get(key)
+    expanded = entry is not None and entry.expanded
+
+    button = layout.operator(
+        "geprep.toggle_result_details",
+        text=text,
+        icon="TRIA_DOWN" if expanded else "TRIA_RIGHT",
+        emboss=False,
+    )
+    button.key = key
+
+    return expanded
+
+
 def draw_result_focus_button(layout, context, target):
     row = layout.row(align=True)
     row.enabled = can_frame_object(context, target)
@@ -17,6 +35,7 @@ def draw_result_focus_button(layout, context, target):
 
 
 def draw_naming_results(layout, settings, context):
+    ui = context.window_manager.geprep_ui
     results = settings.naming_results
 
     if not results:
@@ -24,18 +43,18 @@ def draw_naming_results(layout, settings, context):
 
     box = layout.box()
     box.prop(
-        settings,
+        ui,
         "naming_results_expanded",
         text=f"Last Naming Results ({len(results)})",
         icon=(
             "TRIA_DOWN"
-            if settings.naming_results_expanded
+            if ui.naming_results_expanded
             else "TRIA_RIGHT"
         ),
         emboss=False,
     )
 
-    if not settings.naming_results_expanded:
+    if not ui.naming_results_expanded:
         return
 
     box.label(text="Results from the last naming attempt")
@@ -54,7 +73,7 @@ def draw_naming_results(layout, settings, context):
         "INCOMPLETE": "Recovery Failed",
     }
 
-    for entry in results:
+    for index, entry in enumerate(results):
         item = box.box()
         item.alert = entry.status in {"FAILED", "INCOMPLETE"}
 
@@ -62,12 +81,12 @@ def draw_naming_results(layout, settings, context):
 
         name_row = header.row(align=True)
         name_row.alignment = "LEFT"
-        name_row.prop(
-            entry,
-            "expanded",
-            text=entry.original_name,
-            icon="TRIA_DOWN" if entry.expanded else "TRIA_RIGHT",
-            emboss=False,
+        expanded = draw_result_details_toggle(
+            name_row,
+            context,
+            "naming",
+            index,
+            entry.original_name,
         )
 
         status_row = header.row(align=True)
@@ -85,7 +104,7 @@ def draw_naming_results(layout, settings, context):
             entry.object_ref,
         )
 
-        if not entry.expanded:
+        if not expanded:
             continue
 
         item.label(text=f"Before: {entry.original_name}")
@@ -155,6 +174,7 @@ class GEPREP_PT_naming(bpy.types.Panel):
 
 
 def draw_prepare_results(layout, settings, context):
+    ui = context.window_manager.geprep_ui
     results = settings.prepare_results
 
     if not results:
@@ -162,18 +182,18 @@ def draw_prepare_results(layout, settings, context):
 
     box = layout.box()
     box.prop(
-        settings,
+        ui,
         "prepare_results_expanded",
         text=f"Last Prepare Results ({len(results)})",
         icon=(
             "TRIA_DOWN"
-            if settings.prepare_results_expanded
+            if ui.prepare_results_expanded
             else "TRIA_RIGHT"
         ),
         emboss=False,
     )
 
-    if not settings.prepare_results_expanded:
+    if not ui.prepare_results_expanded:
         return
 
     box.label(text="Results from the last Prepare action")
@@ -194,7 +214,7 @@ def draw_prepare_results(layout, settings, context):
         "INCOMPLETE": "Recovery Failed",
     }
 
-    for entry in results:
+    for index, entry in enumerate(results):
         item = box.box()
         item.alert = entry.status in {"FAILED", "INCOMPLETE"}
 
@@ -202,12 +222,12 @@ def draw_prepare_results(layout, settings, context):
 
         name_row = header.row(align=True)
         name_row.alignment = "LEFT"
-        name_row.prop(
-            entry,
-            "expanded",
-            text=entry.original_name,
-            icon="TRIA_DOWN" if entry.expanded else "TRIA_RIGHT",
-            emboss=False,
+        expanded = draw_result_details_toggle(
+            name_row,
+            context,
+            "prepare",
+            index,
+            entry.original_name,
         )
 
         status_row = header.row(align=True)
@@ -227,7 +247,7 @@ def draw_prepare_results(layout, settings, context):
 
         draw_result_focus_button(status_row, context, target)
 
-        if not entry.expanded:
+        if not expanded:
             continue
 
         item.label(text=f"Original: {entry.original_name}")
@@ -286,6 +306,8 @@ class GEPREP_PT_prepare(bpy.types.Panel):
 
 
 def draw_modifier_preview(layout, settings, context):
+    ui = context.window_manager.geprep_ui
+
     objects = sorted(
         (
             obj
@@ -304,25 +326,25 @@ def draw_modifier_preview(layout, settings, context):
 
     box = layout.box()
     box.prop(
-        settings,
+        ui,
         "modifier_preview_expanded",
         text=f"Selected Meshes ({len(objects)})",
         icon=(
             "TRIA_DOWN"
-            if settings.modifier_preview_expanded
+            if ui.modifier_preview_expanded
             else "TRIA_RIGHT"
         ),
         emboss=False,
     )
 
-    if not settings.modifier_preview_expanded:
+    if not ui.modifier_preview_expanded:
         return
 
     for obj in objects:
         entry = next(
             (
                 entry
-                for entry in settings.modifier_previews
+                for entry in ui.modifier_previews
                 if entry.object_ref == obj
             ),
             None,
@@ -386,6 +408,8 @@ def draw_modifier_preview(layout, settings, context):
 
 
 def draw_modifier_results(layout, settings, context):
+    ui = context.window_manager.geprep_ui
+
     results = settings.modifier_results
 
     if not results:
@@ -393,18 +417,18 @@ def draw_modifier_results(layout, settings, context):
 
     box = layout.box()
     box.prop(
-        settings,
+        ui,
         "modifier_results_expanded",
         text=f"Last Modifier Results ({len(results)})",
         icon=(
             "TRIA_DOWN"
-            if settings.modifier_results_expanded
+            if ui.modifier_results_expanded
             else "TRIA_RIGHT"
         ),
         emboss=False,
     )
 
-    if not settings.modifier_results_expanded:
+    if not ui.modifier_results_expanded:
         return
 
     box.label(text="Results from the last Apply Modifiers action")
@@ -423,7 +447,7 @@ def draw_modifier_results(layout, settings, context):
         "INCOMPLETE": "Recovery Failed",
     }
 
-    for entry in results:
+    for index, entry in enumerate(results):
         item = box.box()
         item.alert = entry.status in {"FAILED", "INCOMPLETE"}
 
@@ -431,12 +455,12 @@ def draw_modifier_results(layout, settings, context):
 
         name_row = header.row(align=True)
         name_row.alignment = "LEFT"
-        name_row.prop(
-            entry,
-            "expanded",
-            text=entry.object_name,
-            icon="TRIA_DOWN" if entry.expanded else "TRIA_RIGHT",
-            emboss=False,
+        expanded = draw_result_details_toggle(
+            name_row,
+            context,
+            "modifiers",
+            index,
+            entry.object_name,
         )
 
         status_row = header.row(align=True)
@@ -453,7 +477,7 @@ def draw_modifier_results(layout, settings, context):
             entry.object_ref,
         )
 
-        if not entry.expanded:
+        if not expanded:
             continue
 
         if entry.status == "APPLIED":

@@ -29,10 +29,11 @@ def record_prepare_batch(settings, batch):
         entry.original_hidden = visibility[3]
 
 
-def store_prepare_results(settings, records, status, message):
+def store_prepare_results(context, records, status, message):
     """Replace the last report with snapshots of this operation."""
+    settings = context.scene.geprep
     settings.prepare_results.clear()
-    settings.prepare_results_expanded = True
+    context.window_manager.geprep_ui.prepare_results_expanded = True
 
     for source, copy_name, duplicate in records:
         entry = settings.prepare_results.add()
@@ -81,7 +82,7 @@ class GEPREP_OT_prepare_copy(bpy.types.Operator):
         except PrepareRecoveryError as error:
             traceback.print_exc()
             store_prepare_results(
-                settings,
+                context,
                 failure_records,
                 "INCOMPLETE",
                 str(error),
@@ -91,7 +92,7 @@ class GEPREP_OT_prepare_copy(bpy.types.Operator):
 
         except ValueError as error:
             store_prepare_results(
-                settings,
+                context,
                 failure_records,
                 "SKIPPED",
                 str(error),
@@ -102,7 +103,7 @@ class GEPREP_OT_prepare_copy(bpy.types.Operator):
         except Exception as error:
             traceback.print_exc()
             store_prepare_results(
-                settings,
+                context,
                 failure_records,
                 "FAILED",
                 f"No prepared copies kept. {error}",
@@ -125,7 +126,7 @@ class GEPREP_OT_prepare_copy(bpy.types.Operator):
                 f"data failed: {error}. Use Undo before continuing"
             )
             store_prepare_results(
-                settings,
+                context,
                 records,
                 "INCOMPLETE",
                 message,
@@ -134,7 +135,7 @@ class GEPREP_OT_prepare_copy(bpy.types.Operator):
             return {"FINISHED"}
 
         store_prepare_results(
-            settings,
+            context,
             records,
             "PREPARED",
             "Working copy created. Original hidden",
@@ -191,7 +192,7 @@ class GEPREP_OT_remove_prepared_copies(bpy.types.Operator):
 
         except ValueError as error:
             store_prepare_results(
-                settings,
+                context,
                 records,
                 "SKIPPED",
                 str(error),
@@ -202,7 +203,7 @@ class GEPREP_OT_remove_prepared_copies(bpy.types.Operator):
         except PrepareRecoveryError as error:
             traceback.print_exc()
             store_prepare_results(
-                settings,
+                context,
                 records,
                 "INCOMPLETE",
                 str(error),
@@ -211,7 +212,7 @@ class GEPREP_OT_remove_prepared_copies(bpy.types.Operator):
             return {"FINISHED"}
 
         store_prepare_results(
-            settings,
+            context,
             records,
             "RESTORED",
             "Prepared copy removed if present. Original visibility restored",

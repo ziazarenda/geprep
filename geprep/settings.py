@@ -19,11 +19,6 @@ class GEPREP_PG_naming_result(bpy.types.PropertyGroup):
 
     message: bpy.props.StringProperty()
 
-    expanded: bpy.props.BoolProperty(
-        name="Show Details",
-        default=False,
-    )
-
 
 class GEPREP_PG_prepare_selection(bpy.types.PropertyGroup):
     object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
@@ -65,7 +60,6 @@ class GEPREP_PG_prepare_result(bpy.types.PropertyGroup):
     )
 
     message: bpy.props.StringProperty()
-    expanded: bpy.props.BoolProperty(default=False)
 
 
 class GEPREP_PG_modifier_preview(bpy.types.PropertyGroup):
@@ -90,7 +84,42 @@ class GEPREP_PG_modifier_result(bpy.types.PropertyGroup):
     applied: bpy.props.IntProperty(default=0, min=0)
     disabled: bpy.props.IntProperty(default=0, min=0)
     message: bpy.props.StringProperty()
+
+
+class GEPREP_PG_result_foldout(bpy.types.PropertyGroup):
     expanded: bpy.props.BoolProperty(default=False)
+
+
+class GEPREP_PG_ui(bpy.types.PropertyGroup):
+    naming_results_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    prepare_results_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    modifier_preview_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    modifier_results_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    modifier_previews: bpy.props.CollectionProperty(
+        type=GEPREP_PG_modifier_preview,
+        options={"SKIP_SAVE"},
+    )
+
+    result_foldouts: bpy.props.CollectionProperty(
+        type=GEPREP_PG_result_foldout,
+        options={"SKIP_SAVE"},
+    )
 
 
 class GEPREP_PG_settings(bpy.types.PropertyGroup):
@@ -111,12 +140,6 @@ class GEPREP_PG_settings(bpy.types.PropertyGroup):
 
     naming_results: bpy.props.CollectionProperty(
         type=GEPREP_PG_naming_result,
-        options={"SKIP_SAVE"},
-    )
-
-    naming_results_expanded: bpy.props.BoolProperty(
-        name="Last Naming Results",
-        default=True,
         options={"SKIP_SAVE"},
     )
 
@@ -160,30 +183,8 @@ class GEPREP_PG_settings(bpy.types.PropertyGroup):
         options={"SKIP_SAVE"},
     )
 
-    prepare_results_expanded: bpy.props.BoolProperty(
-        name="Last Prepare Results",
-        default=True,
-        options={"SKIP_SAVE"},
-    )
-
-
-    modifier_preview_expanded: bpy.props.BoolProperty(
-        default=True,
-        options={"SKIP_SAVE"},
-    )
-
-    modifier_previews: bpy.props.CollectionProperty(
-        type=GEPREP_PG_modifier_preview,
-        options={"SKIP_SAVE"},
-    )
-
     modifier_results: bpy.props.CollectionProperty(
         type=GEPREP_PG_modifier_result,
-        options={"SKIP_SAVE"},
-    )
-
-    modifier_results_expanded: bpy.props.BoolProperty(
-        default=True,
         options={"SKIP_SAVE"},
     )
 
@@ -192,7 +193,12 @@ def register():
     bpy.types.Scene.geprep = bpy.props.PointerProperty(
         type=GEPREP_PG_settings,
     )
+    bpy.types.WindowManager.geprep_ui = bpy.props.PointerProperty(
+        type=GEPREP_PG_ui,
+        options={"SKIP_SAVE"},
+    )
 
 
 def unregister():
+    del bpy.types.WindowManager.geprep_ui
     del bpy.types.Scene.geprep

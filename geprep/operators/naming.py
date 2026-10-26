@@ -79,7 +79,7 @@ class GEPREP_OT_rename_objects(bpy.types.Operator):
 
         results = settings.naming_results
         results.clear()
-        settings.naming_results_expanded = True
+        context.window_manager.geprep_ui.naming_results_expanded = True
 
         for obj, message in excluded:
             record_naming_result(

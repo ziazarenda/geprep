@@ -30,7 +30,7 @@ class GEPREP_OT_toggle_modifier_preview(bpy.types.Operator):
         if obj is None:
             return {"CANCELLED"}
 
-        previews = context.scene.geprep.modifier_previews
+        previews = context.window_manager.geprep_ui.modifier_previews
 
         # Remove entries whose objects have been deleted.
         for index in reversed(range(len(previews))):
@@ -89,7 +89,7 @@ class GEPREP_OT_apply_modifiers(bpy.types.Operator):
 
         results = settings.modifier_results
         results.clear()
-        settings.modifier_results_expanded = True
+        context.window_manager.geprep_ui.modifier_results_expanded = True
 
         recovery_failed = False
 
