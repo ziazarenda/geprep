@@ -436,7 +436,13 @@ def restore_mesh_material_links(obj, slots, active_index):
     obj.active_material_index = active_index
 
 
-def apply_mesh_fix(context, obj, build_fix):
+def apply_mesh_fix(
+    context,
+    obj,
+    build_fix,
+    *,
+    require_applied_modifiers=True,
+):
     """Build and assign a mesh fix, restoring the original on failure."""
     if context.mode != "OBJECT":
         raise ValueError("Return to Object Mode before fixing meshes")
@@ -455,7 +461,10 @@ def apply_mesh_fix(context, obj, build_fix):
     ):
         raise ValueError("Use an editable local object")
 
-    if any(modifier.show_viewport for modifier in obj.modifiers):
+    if require_applied_modifiers and any(
+        modifier.show_viewport
+        for modifier in obj.modifiers
+    ):
         raise ValueError("Apply viewport-enabled modifiers first")
 
     original_mesh = obj.data

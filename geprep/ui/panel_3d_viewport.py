@@ -3,6 +3,7 @@ import textwrap
 
 from ..operators.navigation import can_frame_object
 from ..operations.mesh import MESH_FINDINGS
+from ..operations.uv import UV_FINDINGS
 
 
 def draw_result_details_toggle(layout, context, section, index, text):
@@ -834,6 +835,256 @@ class GEPREP_PT_mesh(bpy.types.Panel):
         draw_mesh_fix_results(fixes, settings, context)
 
 
+def draw_uv_results(layout, settings, context):
+    ui = context.window_manager.geprep_ui
+    results = settings.uv_results
+
+    if not results:
+        return
+
+    box = layout.box()
+    box.prop(
+        ui,
+        "uv_results_expanded",
+        text=f"Last UV Check ({len(results)})",
+        icon=(
+            "TRIA_DOWN"
+            if ui.uv_results_expanded
+            else "TRIA_RIGHT"
+        ),
+        emboss=False,
+    )
+
+    if not ui.uv_results_expanded:
+        return
+
+    box.label(
+        text=(
+            f"Texture: {settings.uv_checked_width} "
+            f"× {settings.uv_checked_height}"
+        )
+    )
+    box.label(
+        text=(
+            f"Target: {settings.uv_checked_target:g} px/m "
+            f"(±{settings.uv_checked_tolerance:g}%)"
+        )
+    )
+
+    icons = {
+        "PASSED": "CHECKMARK",
+        "INSPECT": "INFO",
+        "FAILED": "ERROR",
+    }
+
+    labels = {
+        "PASSED": "No Findings",
+        "INSPECT": "Inspect",
+        "FAILED": "Failed",
+    }
+
+    for index, entry in enumerate(results):
+        item = box.box()
+        item.alert = entry.status == "FAILED"
+
+        header = item.row(align=True)
+
+        name_row = header.row(align=True)
+        name_row.alignment = "LEFT"
+        expanded = draw_result_details_toggle(
+            name_row,
+            context,
+            "uv",
+            index,
+            entry.object_name,
+        )
+
+        status_row = header.row(align=True)
+        status_row.alignment = "RIGHT"
+        status_row.label(
+            text=labels[entry.status],
+            icon=icons[entry.status],
+        )
+
+        status_row.separator(factor=1.6)
+        draw_result_focus_button(
+            status_row,
+            context,
+            entry.object_ref,
+        )
+
+        if not expanded:
+            continue
+
+        if entry.message:
+            ui_scale = context.preferences.system.ui_scale
+            available_width = context.region.width / ui_scale - 48
+            characters_per_line = max(10, int(available_width / 7))
+
+            message_column = item.column(align=True)
+
+            for paragraph in entry.message.splitlines():
+                for line in textwrap.wrap(
+                    paragraph,
+                    width=characters_per_line,
+                ):
+                    message_column.label(text=line)
+
+        if entry.status == "FAILED":
+            continue
+
+        details = item.column(align=True)
+
+        values = [
+            ("UV Map", entry.uv_name),
+            (
+                "Density (px/m)",
+                f"{entry.density:.2f}"
+                if entry.density_available
+                else "Unavailable",
+            ),
+            ("Islands", str(entry.islands)),
+        ]
+
+        if entry.density_available and entry.islands > 1:
+            values.append((
+                "Island Range",
+                f"{entry.minimum_density:.2f}–"
+                f"{entry.maximum_density:.2f}",
+            ))
+
+        for label, value in values:
+            row = details.row(align=True)
+            row.label(text=label)
+
+            value_row = row.row(align=True)
+            value_row.alignment = "RIGHT"
+            value_row.label(text=value)
+
+        item.separator()
+        item.label(text="Findings (faces)")
+
+        findings = item.column(align=True)
+
+        for key, label in UV_FINDINGS:
+            count = getattr(entry, f"{key}_faces")
+
+            row = findings.row(align=True)
+            row.label(text=label)
+
+            value_row = row.row(align=True)
+            value_row.alignment = "RIGHT"
+            value_row.label(text=str(count))
+
+            if count:
+                target = entry.object_ref
+
+                row.separator(factor=0.8)
+
+                button_row = row.row(align=True)
+                button_row.enabled = (
+                    context.mode == "OBJECT"
+                    and target is not None
+                )
+
+                button = button_row.operator(
+                    "geprep.select_uv_finding",
+                    text="",
+                    icon="RESTRICT_SELECT_OFF",
+                )
+                button.object_key = (
+                    str(target.as_pointer())
+                    if target is not None
+                    else ""
+                )
+                button.finding = key
+
+
+def draw_uv_density_results(layout, settings, context):
+    ui = context.window_manager.geprep_ui
+    results = settings.uv_density_results
+
+    if not results:
+        return
+
+    box = layout.box()
+    box.prop(
+        ui,
+        "uv_density_results_expanded",
+        text=f"Last Set Density Results ({len(results)})",
+        icon=(
+            "TRIA_DOWN"
+            if ui.uv_density_results_expanded
+            else "TRIA_RIGHT"
+        ),
+        emboss=False,
+    )
+
+    if not ui.uv_density_results_expanded:
+        return
+
+    icons = {
+        "CHANGED": "CHECKMARK",
+        "SKIPPED": "INFO",
+        "FAILED": "ERROR",
+        "INCOMPLETE": "ERROR",
+    }
+
+    labels = {
+        "CHANGED": "Changed",
+        "SKIPPED": "Skipped",
+        "FAILED": "Failed",
+        "INCOMPLETE": "Recovery Failed",
+    }
+
+    for index, entry in enumerate(results):
+        item = box.box()
+        item.alert = entry.status in {"FAILED", "INCOMPLETE"}
+
+        header = item.row(align=True)
+
+        name_row = header.row(align=True)
+        name_row.alignment = "LEFT"
+        expanded = draw_result_details_toggle(
+            name_row,
+            context,
+            "uv_density",
+            index,
+            entry.object_name,
+        )
+
+        status_row = header.row(align=True)
+        status_row.alignment = "RIGHT"
+        status_row.label(
+            text=labels[entry.status],
+            icon=icons[entry.status],
+        )
+
+        status_row.separator(factor=1.6)
+        draw_result_focus_button(
+            status_row,
+            context,
+            entry.object_ref,
+        )
+
+        if not expanded:
+            continue
+
+        if entry.message:
+            ui_scale = context.preferences.system.ui_scale
+            available_width = context.region.width / ui_scale - 48
+            characters_per_line = max(10, int(available_width / 7))
+
+            message_column = item.column(align=True)
+
+            for paragraph in entry.message.splitlines():
+                for line in textwrap.wrap(
+                    paragraph,
+                    width=characters_per_line,
+                ):
+                    message_column.label(text=line)
+
+
 class GEPREP_PT_uv(bpy.types.Panel):
     bl_idname = "GEPREP_PT_uv"
     bl_label = "UV"
@@ -844,7 +1095,53 @@ class GEPREP_PT_uv(bpy.types.Panel):
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
-        pass
+        layout = self.layout
+        settings = context.scene.geprep
+        active = context.view_layer.objects.active
+
+        if active is not None and active.type == "MESH":
+            layout.prop_search(
+                settings,
+                "uv_map_name",
+                active.data,
+                "uv_layers",
+                text="UV Map",
+            )
+        else:
+            layout.prop(settings, "uv_map_name")
+
+        layout.prop(
+            settings,
+            "uv_texture_preset",
+            text="Texture",
+        )
+
+        if settings.uv_texture_preset == "CUSTOM":
+            row = layout.row(align=True)
+            row.prop(settings, "uv_texture_width")
+            row.prop(settings, "uv_texture_height")
+
+        layout.prop(settings, "uv_density_preset")
+
+        if settings.uv_density_preset == "CUSTOM":
+            layout.prop(settings, "uv_target_density")
+
+        layout.prop(settings, "uv_tolerance")
+
+        row = layout.row(align=True)
+
+        row.operator(
+            "geprep.check_uvs",
+            text="Check UVs",
+            icon="VIEWZOOM",
+        )
+        row.operator(
+            "geprep.set_uv_density",
+            text="Set Density",
+        )
+
+        draw_uv_results(layout, settings, context)
+        draw_uv_density_results(layout, settings, context)
 
 
 class GEPREP_PT_materials(bpy.types.Panel):

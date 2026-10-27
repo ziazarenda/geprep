@@ -1,6 +1,22 @@
 import bpy
 
 
+def update_uv_texture_preset(self, context):
+    if self.uv_texture_preset == "CUSTOM":
+        return
+
+    size = int(self.uv_texture_preset)
+    self.uv_texture_width = size
+    self.uv_texture_height = size
+
+
+def update_uv_density_preset(self, context):
+    if self.uv_density_preset == "CUSTOM":
+        return
+
+    self.uv_target_density = float(self.uv_density_preset)
+
+
 class GEPREP_PG_naming_result(bpy.types.PropertyGroup):
     object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
 
@@ -140,6 +156,16 @@ class GEPREP_PG_ui(bpy.types.PropertyGroup):
         options={"SKIP_SAVE"},
     )
 
+    uv_results_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    uv_density_results_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
     result_foldouts: bpy.props.CollectionProperty(
         type=GEPREP_PG_result_foldout,
         options={"SKIP_SAVE"},
@@ -179,6 +205,56 @@ class GEPREP_PG_mesh_result(bpy.types.PropertyGroup):
 
 
 class GEPREP_PG_mesh_fix_result(bpy.types.PropertyGroup):
+    object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
+    object_name: bpy.props.StringProperty()
+
+    status: bpy.props.EnumProperty(
+        items=(
+            ("CHANGED", "Changed", ""),
+            ("SKIPPED", "Skipped", ""),
+            ("FAILED", "Failed", ""),
+            ("INCOMPLETE", "Recovery Failed", ""),
+        ),
+        default="SKIPPED",
+    )
+
+    message: bpy.props.StringProperty()
+
+
+class GEPREP_PG_uv_result(bpy.types.PropertyGroup):
+    object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
+    object_name: bpy.props.StringProperty()
+    uv_name: bpy.props.StringProperty()
+
+    status: bpy.props.EnumProperty(
+        items=(
+            ("PASSED", "No Findings", ""),
+            ("INSPECT", "Inspect", ""),
+            ("FAILED", "Failed", ""),
+        ),
+        default="FAILED",
+    )
+
+    message: bpy.props.StringProperty()
+
+    density_available: bpy.props.BoolProperty()
+    density: bpy.props.FloatProperty(min=0)
+    minimum_density: bpy.props.FloatProperty(min=0)
+    maximum_density: bpy.props.FloatProperty(min=0)
+
+    islands: bpy.props.IntProperty(min=0)
+    mismatched_islands: bpy.props.IntProperty(min=0)
+    unmeasurable_islands: bpy.props.IntProperty(min=0)
+
+    density_faces: bpy.props.IntProperty(min=0)
+    outside_tile_faces: bpy.props.IntProperty(min=0)
+    collapsed_uv_faces: bpy.props.IntProperty(min=0)
+    degenerate_mesh_faces: bpy.props.IntProperty(min=0)
+    mirrored_faces: bpy.props.IntProperty(min=0)
+    unmeasurable_faces: bpy.props.IntProperty(min=0)
+
+
+class GEPREP_PG_uv_density_result(bpy.types.PropertyGroup):
     object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
     object_name: bpy.props.StringProperty()
 
@@ -315,6 +391,93 @@ class GEPREP_PG_settings(bpy.types.PropertyGroup):
         default=0.0001,
         min=0.000000001,
         precision=6,
+    )
+
+    # UV
+    uv_map_name: bpy.props.StringProperty(
+        name="UV Map",
+        description="Leave empty to use each object's active UV map",
+    )
+
+    uv_texture_preset: bpy.props.EnumProperty(
+        name="Texture Size",
+        description="Choose a square texture size or enter custom dimensions",
+        items=(
+            ("CUSTOM", "Custom", "Enter width and height manually"),
+        ) + tuple(
+            (
+                str(size),
+                f"{size} × {size}",
+                f"Use a {size} × {size} texture",
+            )
+            for size in (256, 512, 1024, 2048, 4096, 8192)
+        ),
+        default="CUSTOM",
+        update=update_uv_texture_preset,
+    )
+
+    uv_texture_width: bpy.props.IntProperty(
+        name="Width",
+        description="Texture width in pixels",
+        default=2048,
+        min=1,
+    )
+
+    uv_texture_height: bpy.props.IntProperty(
+        name="Height",
+        description="Texture height in pixels",
+        default=2048,
+        min=1,
+    )
+
+    uv_density_preset: bpy.props.EnumProperty(
+        name="Density",
+        description="Choose a target density or enter a custom value",
+        items=(
+            ("CUSTOM", "Custom", "Enter the target density manually"),
+        ) + tuple(
+            (
+                str(density),
+                f"{density} px/m",
+                f"Target {density} pixels per metre",
+            )
+            for density in (128, 256, 512, 1024, 2048, 4096)
+        ),
+        default="CUSTOM",
+        update=update_uv_density_preset,
+    )
+
+    uv_target_density: bpy.props.FloatProperty(
+        name="Target (px/m)",
+        description="Target texel density in pixels per metre",
+        default=512,
+        min=0.000001,
+        precision=2,
+    )
+
+    uv_tolerance: bpy.props.FloatProperty(
+        name="Tolerance (%)",
+        description="Allowed percentage difference from the target density",
+        default=10,
+        min=0,
+        max=100,
+        precision=1,
+    )
+
+    uv_results: bpy.props.CollectionProperty(
+        type=GEPREP_PG_uv_result,
+        options={"SKIP_SAVE"},
+    )
+
+    uv_checked_width: bpy.props.IntProperty(options={"SKIP_SAVE"})
+    uv_checked_height: bpy.props.IntProperty(options={"SKIP_SAVE"})
+    uv_checked_target: bpy.props.FloatProperty(options={"SKIP_SAVE"})
+    uv_checked_tolerance: bpy.props.FloatProperty(options={"SKIP_SAVE"})
+    uv_checked_units: bpy.props.FloatProperty(options={"SKIP_SAVE"})
+
+    uv_density_results: bpy.props.CollectionProperty(
+        type=GEPREP_PG_uv_density_result,
+        options={"SKIP_SAVE"},
     )
 
 
