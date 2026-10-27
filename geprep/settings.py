@@ -116,10 +116,83 @@ class GEPREP_PG_ui(bpy.types.PropertyGroup):
         options={"SKIP_SAVE"},
     )
 
+    mesh_results_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    mesh_fix_results_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    mesh_zoom_selection: bpy.props.BoolProperty(
+        name="Zoom to Selection",
+        description="Frame the geometry selected from a mesh finding",
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    mesh_xray_selection: bpy.props.BoolProperty(
+        name="X-Ray on Select",
+        description="Enable X-Ray when selecting a mesh finding",
+        default=False,
+        options={"SKIP_SAVE"},
+    )
+
     result_foldouts: bpy.props.CollectionProperty(
         type=GEPREP_PG_result_foldout,
         options={"SKIP_SAVE"},
     )
+
+
+class GEPREP_PG_mesh_result(bpy.types.PropertyGroup):
+    object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
+    object_name: bpy.props.StringProperty()
+
+    status: bpy.props.EnumProperty(
+        items=(
+            ("PASSED", "No Findings", ""),
+            ("INSPECT", "Inspect", ""),
+            ("FAILED", "Failed", ""),
+        ),
+        default="FAILED",
+    )
+
+    message: bpy.props.StringProperty()
+
+    vertices: bpy.props.IntProperty(min=0)
+    edges: bpy.props.IntProperty(min=0)
+    faces: bpy.props.IntProperty(min=0)
+    triangles: bpy.props.IntProperty(min=0)
+
+    ngons: bpy.props.IntProperty(min=0)
+    loose_vertices: bpy.props.IntProperty(min=0)
+    loose_edges: bpy.props.IntProperty(min=0)
+    nearby_vertices: bpy.props.IntProperty(min=0)
+    short_edges: bpy.props.IntProperty(min=0)
+    small_faces: bpy.props.IntProperty(min=0)
+    boundaries: bpy.props.IntProperty(min=0)
+    nonmanifold_edges: bpy.props.IntProperty(min=0)
+    nonmanifold_vertices: bpy.props.IntProperty(min=0)
+    winding: bpy.props.IntProperty(min=0)
+
+
+class GEPREP_PG_mesh_fix_result(bpy.types.PropertyGroup):
+    object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
+    object_name: bpy.props.StringProperty()
+
+    status: bpy.props.EnumProperty(
+        items=(
+            ("CHANGED", "Changed", ""),
+            ("SKIPPED", "Skipped", ""),
+            ("FAILED", "Failed", ""),
+            ("INCOMPLETE", "Recovery Failed", ""),
+        ),
+        default="SKIPPED",
+    )
+
+    message: bpy.props.StringProperty()
 
 
 class GEPREP_PG_settings(bpy.types.PropertyGroup):
@@ -186,6 +259,62 @@ class GEPREP_PG_settings(bpy.types.PropertyGroup):
     modifier_results: bpy.props.CollectionProperty(
         type=GEPREP_PG_modifier_result,
         options={"SKIP_SAVE"},
+    )
+
+    # Mesh
+    mesh_distance: bpy.props.FloatProperty(
+        name="Check Distance (m)",
+        description=(
+            "Distance threshold in metres. "
+            "Its square is used as the small-face area threshold"
+        ),
+        default=0.0001,
+        min=0.000000001,
+        precision=6,
+    )
+
+    mesh_results: bpy.props.CollectionProperty(
+        type=GEPREP_PG_mesh_result,
+        options={"SKIP_SAVE"},
+    )
+
+    mesh_checked_distance: bpy.props.FloatProperty(
+        options={"SKIP_SAVE"},
+    )
+
+    mesh_checked_units: bpy.props.FloatProperty(
+        options={"SKIP_SAVE"},
+    )
+
+    mesh_fix_results: bpy.props.CollectionProperty(
+        type=GEPREP_PG_mesh_fix_result,
+        options={"SKIP_SAVE"},
+    )
+
+    mesh_fix_action: bpy.props.StringProperty(
+        options={"SKIP_SAVE"},
+    )
+
+    mesh_merge_distance: bpy.props.FloatProperty(
+        name="Merge Distance (m)",
+        description=(
+            "Merge vertices within this distance in metres. "
+            "May change faces, UVs, and seams"
+        ),
+        default=0.0001,
+        min=0.000000001,
+        precision=6,
+    )
+
+    mesh_dissolve_distance: bpy.props.FloatProperty(
+        name="Dissolve Distance (m)",
+        description=(
+            "Distance threshold for dissolving degenerate geometry "
+            "in metres. May change faces, UVs, and seams"
+        ),
+        default=0.0001,
+        min=0.000000001,
+        precision=6,
     )
 
 

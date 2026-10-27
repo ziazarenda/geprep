@@ -2,6 +2,7 @@ import bpy
 import textwrap
 
 from ..operators.navigation import can_frame_object
+from ..operations.mesh import MESH_FINDINGS
 
 
 def draw_result_details_toggle(layout, context, section, index, text):
@@ -530,6 +531,235 @@ class GEPREP_PT_modifiers(bpy.types.Panel):
         draw_modifier_results(layout, settings, context)
 
 
+def draw_mesh_results(layout, settings, context):
+    ui = context.window_manager.geprep_ui
+    results = settings.mesh_results
+
+    if not results:
+        return
+
+    box = layout.box()
+    box.prop(
+        ui,
+        "mesh_results_expanded",
+        text=f"Last Mesh Check ({len(results)})",
+        icon=(
+            "TRIA_DOWN"
+            if ui.mesh_results_expanded
+            else "TRIA_RIGHT"
+        ),
+        emboss=False,
+    )
+
+    if not ui.mesh_results_expanded:
+        return
+
+    box.label(
+        text=f"Check distance: {settings.mesh_checked_distance:g} m"
+    )
+
+    icons = {
+        "PASSED": "CHECKMARK",
+        "INSPECT": "INFO",
+        "FAILED": "ERROR",
+    }
+
+    labels = {
+        "PASSED": "No Findings",
+        "INSPECT": "Inspect",
+        "FAILED": "Failed",
+    }
+
+    for index, entry in enumerate(results):
+        item = box.box()
+        item.alert = entry.status == "FAILED"
+
+        header = item.row(align=True)
+
+        name_row = header.row(align=True)
+        name_row.alignment = "LEFT"
+        expanded = draw_result_details_toggle(
+            name_row,
+            context,
+            "mesh",
+            index,
+            entry.object_name,
+        )
+
+        status_row = header.row(align=True)
+        status_row.alignment = "RIGHT"
+        status_row.label(
+            text=labels[entry.status],
+            icon=icons[entry.status],
+        )
+
+        status_row.separator(factor=1.6)
+        draw_result_focus_button(
+            status_row,
+            context,
+            entry.object_ref,
+        )
+
+        if not expanded:
+            continue
+
+        if entry.message:
+            ui_scale = context.preferences.system.ui_scale
+            available_width = context.region.width / ui_scale - 48
+            characters_per_line = max(10, int(available_width / 7))
+
+            message_column = item.column(align=True)
+
+            for paragraph in entry.message.splitlines():
+                for line in textwrap.wrap(
+                    paragraph,
+                    width=characters_per_line,
+                ):
+                    message_column.label(text=line)
+
+        if entry.status == "FAILED":
+            continue
+
+        totals = item.column(align=True)
+
+        for label, count in (
+            ("Vertices", entry.vertices),
+            ("Edges", entry.edges),
+            ("Faces", entry.faces),
+            ("Triangles", entry.triangles),
+        ):
+            row = totals.row(align=True)
+            row.label(text=label)
+
+            value = row.row(align=True)
+            value.alignment = "RIGHT"
+            value.label(text=str(count))
+
+        item.separator()
+
+        findings = item.column(align=True)
+
+        for key, label, _ in MESH_FINDINGS:
+            count = getattr(entry, key)
+
+            row = findings.row(align=True)
+            row.label(text=label)
+
+            value = row.row(align=True)
+            value.alignment = "RIGHT"
+            value.label(text=str(count))
+
+            if count:
+                target = entry.object_ref
+
+                row.separator(factor=0.8)
+
+                button_row = row.row(align=True)
+                button_row.enabled = (
+                    context.mode == "OBJECT"
+                    and target is not None
+                )
+
+                button = button_row.operator(
+                    "geprep.select_mesh_finding",
+                    text="",
+                    icon="RESTRICT_SELECT_OFF",
+                )
+                button.object_key = (
+                    str(target.as_pointer())
+                    if target is not None
+                    else ""
+                )
+                button.finding = key
+
+
+def draw_mesh_fix_results(layout, settings, context):
+    ui = context.window_manager.geprep_ui
+    results = settings.mesh_fix_results
+
+    if not results:
+        return
+
+    box = layout.box()
+    box.prop(
+        ui,
+        "mesh_fix_results_expanded",
+        text=f"Last Mesh Fix Results ({len(results)})",
+        icon=(
+            "TRIA_DOWN"
+            if ui.mesh_fix_results_expanded
+            else "TRIA_RIGHT"
+        ),
+        emboss=False,
+    )
+
+    if not ui.mesh_fix_results_expanded:
+        return
+
+    box.label(text=settings.mesh_fix_action)
+
+    icons = {
+        "CHANGED": "CHECKMARK",
+        "SKIPPED": "INFO",
+        "FAILED": "ERROR",
+        "INCOMPLETE": "ERROR",
+    }
+
+    labels = {
+        "CHANGED": "Changed",
+        "SKIPPED": "Skipped",
+        "FAILED": "Failed",
+        "INCOMPLETE": "Recovery Failed",
+    }
+
+    for index, entry in enumerate(results):
+        item = box.box()
+        item.alert = entry.status in {"FAILED", "INCOMPLETE"}
+
+        header = item.row(align=True)
+
+        name_row = header.row(align=True)
+        name_row.alignment = "LEFT"
+        expanded = draw_result_details_toggle(
+            name_row,
+            context,
+            "mesh_fixes",
+            index,
+            entry.object_name,
+        )
+
+        status_row = header.row(align=True)
+        status_row.alignment = "RIGHT"
+        status_row.label(
+            text=labels[entry.status],
+            icon=icons[entry.status],
+        )
+
+        status_row.separator(factor=1.6)
+        draw_result_focus_button(
+            status_row,
+            context,
+            entry.object_ref,
+        )
+
+        if not expanded:
+            continue
+
+        if entry.message:
+            ui_scale = context.preferences.system.ui_scale
+            available_width = context.region.width / ui_scale - 48
+            characters_per_line = max(10, int(available_width / 7))
+
+            message_column = item.column(align=True)
+
+            for paragraph in entry.message.splitlines():
+                for line in textwrap.wrap(
+                    paragraph,
+                    width=characters_per_line,
+                ):
+                    message_column.label(text=line)
+
+
 class GEPREP_PT_mesh(bpy.types.Panel):
     bl_idname = "GEPREP_PT_mesh"
     bl_label = "Mesh"
@@ -540,7 +770,68 @@ class GEPREP_PT_mesh(bpy.types.Panel):
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
-        pass
+        layout = self.layout
+        settings = context.scene.geprep
+
+        layout.prop(settings, "mesh_distance")
+
+        layout.operator(
+            "geprep.check_mesh",
+            text="Check Mesh",
+            icon="VIEWZOOM",
+        )
+
+        ui = context.window_manager.geprep_ui
+        layout.prop(ui, "mesh_zoom_selection")
+        layout.prop(ui, "mesh_xray_selection")
+
+        draw_mesh_results(layout, settings, context)
+
+        fixes = layout.box()
+        fixes.label(text="Mesh Fixes")
+
+        button = fixes.operator(
+            "geprep.mesh_fix",
+            text="Remove Loose Geometry",
+        )
+        button.action = "LOOSE"
+
+        fixes.separator()
+        fixes.prop(settings, "mesh_merge_distance")
+
+        button = fixes.operator(
+            "geprep.mesh_fix",
+            text="Merge by Distance",
+        )
+        button.action = "MERGE"
+
+        fixes.separator()
+
+        button = fixes.operator(
+            "geprep.mesh_fix",
+            text="Recalculate Normals Outside",
+        )
+        button.action = "NORMALS"
+
+        fixes.separator()
+
+        button = fixes.operator(
+            "geprep.mesh_fix",
+            text="Triangulate",
+        )
+        button.action = "TRIANGULATE"
+
+        fixes.separator()
+
+        fixes.prop(settings, "mesh_dissolve_distance")
+
+        button = fixes.operator(
+            "geprep.mesh_fix",
+            text="Dissolve Degenerate Geometry",
+        )
+        button.action = "DEGENERATE"
+
+        draw_mesh_fix_results(fixes, settings, context)
 
 
 class GEPREP_PT_uv(bpy.types.Panel):
