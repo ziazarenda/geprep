@@ -271,6 +271,43 @@ class GEPREP_PG_uv_density_result(bpy.types.PropertyGroup):
     message: bpy.props.StringProperty()
 
 
+class GEPREP_PG_checker_slot(bpy.types.PropertyGroup):
+    link: bpy.props.EnumProperty(
+        items=(
+            ("DATA", "Data", "Material linked to the mesh"),
+            ("OBJECT", "Object", "Material linked to the object"),
+        ),
+        default="DATA",
+    )
+
+    material: bpy.props.PointerProperty(
+        type=bpy.types.Material,
+    )
+
+
+class GEPREP_PG_checker_record(bpy.types.PropertyGroup):
+    object_ref: bpy.props.PointerProperty(
+        type=bpy.types.Object,
+    )
+
+    slots: bpy.props.CollectionProperty(
+        type=GEPREP_PG_checker_slot,
+    )
+
+    checker: bpy.props.PointerProperty(
+        type=bpy.types.Material,
+    )
+
+    temporary_slot: bpy.props.BoolProperty(
+        default=False,
+    )
+
+    active_material_index: bpy.props.IntProperty(
+        default=0,
+        min=0,
+    )
+
+
 class GEPREP_PG_settings(bpy.types.PropertyGroup):
     name_base: bpy.props.StringProperty(
         name="Base Name",
@@ -478,6 +515,10 @@ class GEPREP_PG_settings(bpy.types.PropertyGroup):
     uv_density_results: bpy.props.CollectionProperty(
         type=GEPREP_PG_uv_density_result,
         options={"SKIP_SAVE"},
+    )
+
+    checker_records: bpy.props.CollectionProperty(
+        type=GEPREP_PG_checker_record,
     )
 
 

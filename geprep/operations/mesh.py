@@ -462,6 +462,12 @@ def apply_mesh_fix(
         raise ValueError("Use an editable local object")
 
     if require_applied_modifiers and any(
+        record.object_ref == obj
+        for record in context.scene.geprep.checker_records
+    ):
+        raise ValueError("Remove the checker before applying geometry fixes")
+
+    if require_applied_modifiers and any(
         modifier.show_viewport
         for modifier in obj.modifiers
     ):

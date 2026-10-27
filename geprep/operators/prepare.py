@@ -4,8 +4,9 @@ import bpy
 
 from ..operations.prepare import (
     PrepareRecoveryError,
+    find_selected_prepare_batches,
     prepare_assets,
-    remove_last_prepare_batch,
+    remove_prepare_batch,
 )
 
 
@@ -156,12 +157,12 @@ class GEPREP_OT_prepare_copy(bpy.types.Operator):
 
 
 class GEPREP_OT_remove_prepared_copies(bpy.types.Operator):
-    """Remove the latest prepared batch and restore its originals."""
+    """Remove selected prepared copies and restore their originals."""
 
     bl_idname = "geprep.remove_prepared_copies"
     bl_label = "Remove Prepared Copies"
     bl_description = (
-        "Remove the most recently prepared batch and restore its originals"
+        "Remove selected prepared copies and restore their originals"
     )
     bl_options = {"REGISTER", "UNDO"}
 
@@ -170,25 +171,44 @@ class GEPREP_OT_remove_prepared_copies(bpy.types.Operator):
         return (
             context.mode == "OBJECT"
             and context.scene.is_editable
-            and bool(context.scene.geprep.prepare_batches)
+            and bool(
+                find_selected_prepare_batches(
+                    context,
+                    context.scene.geprep.prepare_batches,
+                )
+            )
         )
 
     def execute(self, context):
         settings = context.scene.geprep
         batches = settings.prepare_batches
+        indices = find_selected_prepare_batches(context, batches)
 
-        # Snapshot names before removal invalidates the copy references.
+        if len(indices) != 1:
+            self.report(
+                {"WARNING"},
+                "Select prepared copies from one batch at a time",
+            )
+            return {"CANCELLED"}
+
+        index = indices[0]
+
+        # Snapshot only the copies selected for removal.
+        selected = set(context.selected_objects)
+
         records = [
             (
                 entry.source,
-                entry.duplicate.name if entry.duplicate else "",
+                entry.duplicate.name,
                 None,
             )
-            for entry in batches[-1].entries
-        ] if batches else []
+            for entry in batches[index].entries
+            if entry.duplicate is not None
+            and entry.duplicate in selected
+        ]
 
         try:
-            removed = remove_last_prepare_batch(context, batches)
+            removed = remove_prepare_batch(context, batches, index)
 
         except ValueError as error:
             store_prepare_results(

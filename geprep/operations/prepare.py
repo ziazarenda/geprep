@@ -47,6 +47,14 @@ def validate_prepare_sources(context, sources, *, apply_rotation_scale=False):
     problems = []
 
     for obj in sources:
+        if any(
+            record.object_ref == obj
+            for record in context.scene.geprep.checker_records
+        ):
+            problems.append(
+                "Remove the checker before creating prepared copies"
+            )
+
         if obj.library is not None:
             problems.append(f"{obj.name!r} is linked. Make it local first")
         elif obj.override_library is not None:
@@ -542,15 +550,29 @@ def prepare_assets(
     }
 
 
-def remove_last_prepare_batch(context, batches):
-    """Remove the latest prepared batch and restore its originals."""
+def find_selected_prepare_batches(context, batches):
+    """Find batches containing selected prepared copies."""
+    selected = set(context.selected_objects)
+
+    return [
+        index
+        for index, batch in enumerate(batches)
+        if any(
+            entry.duplicate is not None
+            and entry.duplicate in selected
+            for entry in batch.entries
+        )
+    ]
+
+
+def remove_prepare_batch(context, batches, index):
+    """Remove selected copies from a batch and restore their originals."""
     if context.mode != "OBJECT":
         raise ValueError("Removing prepared copies requires Object Mode")
 
-    if not batches:
-        raise ValueError("There are no prepared batches to remove")
+    if not 0 <= index < len(batches):
+        raise ValueError("The prepared batch no longer exists")
 
-    index = len(batches) - 1
     batch = batches[index]
 
     if context.view_layer.name != batch.view_layer:
@@ -559,13 +581,22 @@ def remove_last_prepare_batch(context, batches):
             "before removing this batch"
         )
 
-    entries = list(batch.entries)
+    selected = set(context.selected_objects)
+
+    entry_indices = [
+        entry_index
+        for entry_index, entry in enumerate(batch.entries)
+        if entry.duplicate is not None
+        and entry.duplicate in selected
+    ]
+
+    entries = [
+        batch.entries[entry_index]
+        for entry_index in entry_indices
+    ]
 
     if not entries:
-        raise ValueError(
-            "This batch has no restoration records. "
-            "Use Undo to return to before preparation"
-        )
+        raise ValueError("Select prepared copies to remove")
 
     copies = {}
     sources = set()
@@ -608,13 +639,64 @@ def remove_last_prepare_batch(context, batches):
             "The batch incorrectly identifies an original as a prepared copy"
         )
 
+    # Removing an older batch must not invalidate another batch.
+    duplicates = set(copies.values())
+
+    for other_index, other_batch in enumerate(batches):
+        if other_index == index:
+            continue
+
+        if any(
+            entry.source is not None
+            and (
+                entry.source in duplicates
+                or entry.source in sources
+            )
+            for entry in other_batch.entries
+        ):
+            raise ValueError(
+                "Another prepared batch depends on this batch or shares "
+                "its originals. Remove that batch first"
+            )
+
+    # Keep objects outside this batch from losing their prepared parent.
+    if any(
+        child not in duplicates
+        for duplicate in duplicates
+        for child in duplicate.children
+    ):
+        raise ValueError(
+            "A prepared copy has children outside this batch. "
+            "Reparent those children before removing the batch"
+        )
+
+    if any(
+        record.object_ref in duplicates
+        for record in context.scene.geprep.checker_records
+    ):
+        raise ValueError(
+            "Remove the checker from the prepared copies "
+            "before removing this batch"
+        )
+
+    # Keep unrelated selected objects and select the restored originals.
     original_selection = [
-        entry.object_ref
-        for entry in batch.selection
-        if entry.object_ref is not None
-        and entry.object_ref.name in context.view_layer.objects
+        obj
+        for obj in context.selected_objects
+        if obj not in duplicates
     ]
-    original_active = batch.original_active
+
+    for entry in entries:
+        if entry.source not in original_selection:
+            original_selection.append(entry.source)
+
+    original_active = context.view_layer.objects.active
+
+    # Replace an active prepared copy with its corresponding original.
+    for entry in entries:
+        if entry.duplicate == original_active:
+            original_active = entry.source
+            break
     removed_count = len(copies)
     stage = "restore original visibility"
 
@@ -640,20 +722,29 @@ def remove_last_prepare_batch(context, batches):
             obj.select_set(False, view_layer=context.view_layer)
 
         for obj in original_selection:
-            obj.select_set(True, view_layer=context.view_layer)
+            if (
+                not obj.hide_select
+                and obj.visible_get(view_layer=context.view_layer)
+            ):
+                obj.select_set(True, view_layer=context.view_layer)
 
-        if (
-            original_active is not None
-            and original_active.name in context.view_layer.objects
-        ):
+        selected_after = list(context.selected_objects)
+
+        if original_active is not None and original_active in selected_after:
             context.view_layer.objects.active = original_active
         else:
             context.view_layer.objects.active = (
-                original_selection[0] if original_selection else None
+                selected_after[0] if selected_after else None
             )
 
-        stage = "remove the completed batch record"
-        batches.remove(index)
+        stage = "remove the completed restoration records"
+
+        for entry_index in reversed(entry_indices):
+            batch.entries.remove(entry_index)
+
+        # Keep restoration records for copies that were not removed.
+        if not batch.entries:
+            batches.remove(index)
 
     except Exception as error:
         raise PrepareRecoveryError(

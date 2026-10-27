@@ -59,8 +59,6 @@ def draw_naming_results(layout, settings, context):
     if not ui.naming_results_expanded:
         return
 
-    box.label(text="Results from the last naming attempt")
-
     icons = {
         "CHANGED": "CHECKMARK",
         "SKIPPED": "INFO",
@@ -197,8 +195,6 @@ def draw_prepare_results(layout, settings, context):
 
     if not ui.prepare_results_expanded:
         return
-
-    box.label(text="Results from the last Prepare action")
 
     icons = {
         "PREPARED": "CHECKMARK",
@@ -432,8 +428,6 @@ def draw_modifier_results(layout, settings, context):
 
     if not ui.modifier_results_expanded:
         return
-
-    box.label(text="Results from the last Apply Modifiers action")
 
     icons = {
         "APPLIED": "CHECKMARK",
@@ -1142,6 +1136,18 @@ class GEPREP_PT_uv(bpy.types.Panel):
 
         draw_uv_results(layout, settings, context)
         draw_uv_density_results(layout, settings, context)
+
+        layout.separator()
+
+        row = layout.row(align=True)
+        row.operator(
+            "geprep.checker_preview",
+            text="Checker",
+        )
+        row.operator(
+            "geprep.restore_checker",
+            text="Remove Checker",
+        )
 
 
 class GEPREP_PT_materials(bpy.types.Panel):

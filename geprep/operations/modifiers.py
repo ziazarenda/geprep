@@ -188,6 +188,12 @@ def apply_object_modifiers(context, obj):
     if context.view_layer.objects.get(obj.name) != obj:
         raise ValueError("This object is not in the current view layer")
 
+    if any(
+        record.object_ref == obj
+        for record in context.scene.geprep.checker_records
+    ):
+        raise ValueError("Remove the checker before applying modifiers")
+
     modifier_names = validate_modifier_apply(obj)
 
     if not modifier_names:
