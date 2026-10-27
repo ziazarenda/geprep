@@ -4,12 +4,12 @@ import re
 _NUMERIC_SUFFIX = re.compile(r"\.\d{3,}$")
 
 
-def base_name(name: str) -> str:
-    """Validate and normalize the requested base name."""
+def validate_name(name: str) -> str:
+    """Validate and normalize the requested new name."""
     result = name.strip()
 
     if not result:
-        raise ValueError("Enter a Base Name first")
+        raise ValueError("Enter a Name first")
 
     return result
 
@@ -73,15 +73,15 @@ def plan_renames(
     existing_names,
     action,
     *,
-    base="",
+    new_name="",
     find="",
     replacement="",
 ):
     """Plan renames without modifying Blender objects."""
-    if action not in {"BASE", "REPLACE", "SUFFIX"}:
+    if action not in {"NEW", "REPLACE", "SUFFIX"}:
         raise ValueError(f"Unknown naming action: {action!r}")
 
-    requested_base = base_name(base) if action == "BASE" else ""
+    requested_name = validate_name(new_name) if action == "NEW" else ""
 
     if action == "REPLACE" and not find:
         raise ValueError("Enter the text to find first")
@@ -101,8 +101,8 @@ def plan_renames(
         plans.append(plan)
 
         try:
-            if action == "BASE":
-                requested = requested_base
+            if action == "NEW":
+                requested = requested_name
             elif action == "REPLACE":
                 requested = replace_name(old, find, replacement)
             else:
@@ -116,11 +116,11 @@ def plan_renames(
             continue
 
         if (
-            action == "BASE"
+            action == "NEW"
             and _NUMERIC_SUFFIX.search(old)
             and remove_numeric_suffix(old) == requested
         ):
-            plan["message"] = "Already uses this base name with a number"
+            plan["message"] = "Already uses this name with a number"
             continue
 
         candidate = reserve_name(

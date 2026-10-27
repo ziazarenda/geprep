@@ -1,12 +1,70 @@
-import bpy
 import textwrap
 
-from ..operators.navigation import can_frame_object
+import bpy
+
 from ..operations.mesh import MESH_FINDINGS
 from ..operations.uv import UV_FINDINGS
+from ..operators.navigation import can_frame_object
+
+BUTTON_SCALE_Y = 1.5
+INPUT_SCALE_Y = 1.3
+
+RESULT_STATUS_ICONS = {
+    "CHANGED": "CHECKMARK",
+    "PREPARED": "CHECKMARK",
+    "RESTORED": "CHECKMARK",
+    "APPLIED": "CHECKMARK",
+    "PASSED": "CHECKMARK",
+    "SKIPPED": "INFO",
+    "INSPECT": "INFO",
+    "FAILED": "ERROR",
+    "INCOMPLETE": "ERROR",
+}
+
+RESULT_STATUS_LABELS = {
+    "CHANGED": "Changed",
+    "PREPARED": "Prepared",
+    "RESTORED": "Restored",
+    "APPLIED": "Applied",
+    "PASSED": "No Findings",
+    "SKIPPED": "Skipped",
+    "INSPECT": "Inspect",
+    "FAILED": "Failed",
+    "INCOMPLETE": "Recovery Failed",
+}
 
 
-def draw_result_details_toggle(layout, context, section, index, text):
+def draw_results_box(layout, ui, prop_name: str, title: str, count: int):
+    """Draw a standardized collapsable box header for result lists."""
+    box = layout.box()
+    box.use_property_split = False
+    expanded = getattr(ui, prop_name)
+    box.prop(
+        ui,
+        prop_name,
+        text=f"{title} ({count})",
+        icon="TRIA_DOWN" if expanded else "TRIA_RIGHT",
+        emboss=False,
+    )
+    return box, expanded
+
+
+def draw_multiline_message(layout, context, message: str, width_offset: int = 48):
+    """Draw wrapped multiline text adjusted to current viewport width."""
+    if not message:
+        return
+
+    ui_scale = context.preferences.system.ui_scale
+    available_width = context.region.width / ui_scale - width_offset
+    characters_per_line = max(10, int(available_width / 7))
+
+    message_column = layout.column(align=True)
+    for paragraph in message.splitlines():
+        for line in textwrap.wrap(paragraph, width=characters_per_line):
+            message_column.label(text=line)
+
+
+def draw_result_details_toggle(layout, context, section: str, index: int, text: str):
     ui = context.window_manager.geprep_ui
     key = f"{context.scene.session_uid}:{section}:{index}"
 
@@ -36,6 +94,51 @@ def draw_result_focus_button(layout, context, target):
     button.object_key = str(target.as_pointer()) if target is not None else ""
 
 
+def draw_result_item_header(
+    box,
+    context,
+    section: str,
+    index: int,
+    title: str,
+    status: str,
+    target_object=None,
+    status_label: str | None = None,
+):
+    """Draw a standardized item card header for a single result entry."""
+    item = box.box()
+    item.use_property_split = False
+    item.alert = status in {"FAILED", "INCOMPLETE"}
+
+    header = item.row(align=True)
+
+    name_row = header.row(align=True)
+    name_row.alignment = "LEFT"
+    expanded = draw_result_details_toggle(
+        name_row,
+        context,
+        section,
+        index,
+        title,
+    )
+
+    status_row = header.row(align=True)
+    status_row.alignment = "RIGHT"
+    display_label = (
+        status_label
+        if status_label is not None
+        else RESULT_STATUS_LABELS.get(status, status.capitalize())
+    )
+    status_row.label(
+        text=display_label,
+        icon=RESULT_STATUS_ICONS.get(status, "NONE"),
+    )
+
+    status_row.separator(factor=1.6)
+    draw_result_focus_button(status_row, context, target_object)
+
+    return item, expanded
+
+
 def draw_naming_results(layout, settings, context):
     ui = context.window_manager.geprep_ui
     results = settings.naming_results
@@ -43,86 +146,35 @@ def draw_naming_results(layout, settings, context):
     if not results:
         return
 
-    box = layout.box()
-    box.prop(
+    box, expanded = draw_results_box(
+        layout,
         ui,
         "naming_results_expanded",
-        text=f"Last Naming Results ({len(results)})",
-        icon=(
-            "TRIA_DOWN"
-            if ui.naming_results_expanded
-            else "TRIA_RIGHT"
-        ),
-        emboss=False,
+        "Last Naming Results",
+        len(results),
     )
-
-    if not ui.naming_results_expanded:
+    if not expanded:
         return
 
-    icons = {
-        "CHANGED": "CHECKMARK",
-        "SKIPPED": "INFO",
-        "FAILED": "ERROR",
-        "INCOMPLETE": "ERROR",
-    }
-
-    labels = {
-        "CHANGED": "Renamed",
-        "SKIPPED": "Skipped",
-        "FAILED": "Failed",
-        "INCOMPLETE": "Recovery Failed",
-    }
-
     for index, entry in enumerate(results):
-        item = box.box()
-        item.alert = entry.status in {"FAILED", "INCOMPLETE"}
-
-        header = item.row(align=True)
-
-        name_row = header.row(align=True)
-        name_row.alignment = "LEFT"
-        expanded = draw_result_details_toggle(
-            name_row,
+        item, item_expanded = draw_result_item_header(
+            box,
             context,
             "naming",
             index,
             entry.original_name,
-        )
-
-        status_row = header.row(align=True)
-        status_row.alignment = "RIGHT"
-        status_row.label(
-            text=labels[entry.status],
-            icon=icons[entry.status],
-        )
-
-        status_row.separator(factor=1.6)
-
-        draw_result_focus_button(
-            status_row,
-            context,
+            entry.status,
             entry.object_ref,
+            status_label="Renamed" if entry.status == "CHANGED" else None,
         )
 
-        if not expanded:
+        if not item_expanded:
             continue
 
         item.label(text=f"Before: {entry.original_name}")
         item.label(text=f"After: {entry.resulting_name}")
 
-        if entry.message:
-            ui_scale = context.preferences.system.ui_scale
-            available_width = context.region.width / ui_scale - 48
-            characters_per_line = max(10, int(available_width / 7))
-
-            message_column = item.column(align=True)
-
-            for paragraph in entry.message.splitlines():
-                for line in textwrap.wrap(
-                    paragraph,
-                    width=characters_per_line,
-                ):
-                    message_column.label(text=line)
+        draw_multiline_message(item, context, entry.message)
 
 
 class GEPREP_PT_naming(bpy.types.Panel):
@@ -138,38 +190,42 @@ class GEPREP_PT_naming(bpy.types.Panel):
         layout = self.layout
         settings = context.scene.geprep
 
-        layout.label(text="Base Name")
-        layout.prop(settings, "name_base", text="")
+        box = layout.box()
+        col = box.column()
+        col.scale_y = INPUT_SCALE_Y
+        col.prop(settings, "name_new", text="Name")
 
-        button = layout.operator(
+        col = box.column()
+        col.scale_y = BUTTON_SCALE_Y
+        button = col.operator(
             "geprep.rename_objects",
-            text="Set Base Name",
+            text="Set New Name",
         )
-        button.action = "BASE"
+        button.action = "NEW"
 
-        layout.separator()
+        box = layout.box()
+        col = box.column()
+        col.scale_y = INPUT_SCALE_Y
+        col.prop(settings, "name_find", text="Replace")
+        col.prop(settings, "name_replace", text="With")
 
-        layout.label(text="Find")
-        layout.prop(settings, "name_find", text="")
-
-        layout.label(text="Replace With")
-        layout.prop(settings, "name_replace", text="")
-
-        button = layout.operator(
+        col = box.column()
+        col.scale_y = BUTTON_SCALE_Y
+        button = col.operator(
             "geprep.rename_objects",
             text="Find & Replace",
         )
         button.action = "REPLACE"
 
-        layout.separator()
-
-        button = layout.operator(
+        box = layout.box()
+        col = box.column()
+        col.scale_y = BUTTON_SCALE_Y
+        button = col.operator(
             "geprep.rename_objects",
             text="Remove Numeric Suffix",
         )
         button.action = "SUFFIX"
 
-        layout.separator()
         draw_naming_results(layout, settings, context)
 
 
@@ -180,72 +236,33 @@ def draw_prepare_results(layout, settings, context):
     if not results:
         return
 
-    box = layout.box()
-    box.prop(
+    box, expanded = draw_results_box(
+        layout,
         ui,
         "prepare_results_expanded",
-        text=f"Last Prepare Results ({len(results)})",
-        icon=(
-            "TRIA_DOWN"
-            if ui.prepare_results_expanded
-            else "TRIA_RIGHT"
-        ),
-        emboss=False,
+        "Last Prepare Results",
+        len(results),
     )
-
-    if not ui.prepare_results_expanded:
+    if not expanded:
         return
 
-    icons = {
-        "PREPARED": "CHECKMARK",
-        "RESTORED": "CHECKMARK",
-        "SKIPPED": "INFO",
-        "FAILED": "ERROR",
-        "INCOMPLETE": "ERROR",
-    }
-
-    labels = {
-        "PREPARED": "Prepared",
-        "RESTORED": "Restored",
-        "SKIPPED": "Skipped",
-        "FAILED": "Failed",
-        "INCOMPLETE": "Recovery Failed",
-    }
-
     for index, entry in enumerate(results):
-        item = box.box()
-        item.alert = entry.status in {"FAILED", "INCOMPLETE"}
-
-        header = item.row(align=True)
-
-        name_row = header.row(align=True)
-        name_row.alignment = "LEFT"
-        expanded = draw_result_details_toggle(
-            name_row,
-            context,
-            "prepare",
-            index,
-            entry.original_name,
-        )
-
-        status_row = header.row(align=True)
-        status_row.alignment = "RIGHT"
-        status_row.label(
-            text=labels[entry.status],
-            icon=icons[entry.status],
-        )
-
         target = (
             entry.duplicate
             if entry.duplicate is not None
             else entry.source
         )
+        item, item_expanded = draw_result_item_header(
+            box,
+            context,
+            "prepare",
+            index,
+            entry.original_name,
+            entry.status,
+            target,
+        )
 
-        status_row.separator(factor=1.6)
-
-        draw_result_focus_button(status_row, context, target)
-
-        if not expanded:
+        if not item_expanded:
             continue
 
         item.label(text=f"Original: {entry.original_name}")
@@ -253,19 +270,7 @@ def draw_prepare_results(layout, settings, context):
         if entry.copy_name:
             item.label(text=f"Copy: {entry.copy_name}")
 
-        if entry.message:
-            ui_scale = context.preferences.system.ui_scale
-            available_width = context.region.width / ui_scale - 48
-            characters_per_line = max(10, int(available_width / 7))
-
-            message_column = item.column(align=True)
-
-            for paragraph in entry.message.splitlines():
-                for line in textwrap.wrap(
-                    paragraph,
-                    width=characters_per_line,
-                ):
-                    message_column.label(text=line)
+        draw_multiline_message(item, context, entry.message)
 
 
 class GEPREP_PT_prepare(bpy.types.Panel):
@@ -280,26 +285,28 @@ class GEPREP_PT_prepare(bpy.types.Panel):
         layout = self.layout
         settings = context.scene.geprep
 
-        layout.prop(settings, "prepare_include_children")
-        layout.prop(settings, "prepare_use_sm_prefix")
-        layout.prop(settings, "prepare_number_variants")
-        layout.prop(settings, "prepare_duplicate_materials")
-        layout.prop(settings, "prepare_apply_rotation_scale")
+        prep_box = layout.box()
 
-        layout.separator()
+        col = prep_box.column()
+        col.scale_y = INPUT_SCALE_Y
+        col.prop(settings, "prepare_include_children")
+        col.prop(settings, "prepare_use_sm_prefix")
+        col.prop(settings, "prepare_number_variants")
+        col.prop(settings, "prepare_duplicate_materials")
+        col.prop(settings, "prepare_apply_rotation_scale")
 
-        row = layout.row()
-        row.scale_y = 1.5
-        row.operator("geprep.prepare_copy", text="Prepare Copy")
+        col = prep_box.column()
+        col.scale_y = BUTTON_SCALE_Y
+        col.operator("geprep.prepare_copy", text="Prepare Copy")
 
-        row = layout.row()
-        row.scale_y = 1.5
-        row.operator(
+        clean_box = layout.box()
+        col = clean_box.column()
+        col.scale_y = BUTTON_SCALE_Y
+        col.operator(
             "geprep.remove_prepared_copies",
             text="Remove Prepared Copies",
         )
 
-        layout.separator()
         draw_prepare_results(layout, settings, context)
 
 
@@ -323,6 +330,7 @@ def draw_modifier_preview(layout, settings, context):
         return
 
     box = layout.box()
+    box.use_property_split = False
     box.prop(
         ui,
         "modifier_preview_expanded",
@@ -407,73 +415,33 @@ def draw_modifier_preview(layout, settings, context):
 
 def draw_modifier_results(layout, settings, context):
     ui = context.window_manager.geprep_ui
-
     results = settings.modifier_results
 
     if not results:
         return
 
-    box = layout.box()
-    box.prop(
+    box, expanded = draw_results_box(
+        layout,
         ui,
         "modifier_results_expanded",
-        text=f"Last Modifier Results ({len(results)})",
-        icon=(
-            "TRIA_DOWN"
-            if ui.modifier_results_expanded
-            else "TRIA_RIGHT"
-        ),
-        emboss=False,
+        "Last Modifier Results",
+        len(results),
     )
-
-    if not ui.modifier_results_expanded:
+    if not expanded:
         return
 
-    icons = {
-        "APPLIED": "CHECKMARK",
-        "SKIPPED": "INFO",
-        "FAILED": "ERROR",
-        "INCOMPLETE": "ERROR",
-    }
-
-    labels = {
-        "APPLIED": "Applied",
-        "SKIPPED": "Skipped",
-        "FAILED": "Failed",
-        "INCOMPLETE": "Recovery Failed",
-    }
-
     for index, entry in enumerate(results):
-        item = box.box()
-        item.alert = entry.status in {"FAILED", "INCOMPLETE"}
-
-        header = item.row(align=True)
-
-        name_row = header.row(align=True)
-        name_row.alignment = "LEFT"
-        expanded = draw_result_details_toggle(
-            name_row,
+        item, item_expanded = draw_result_item_header(
+            box,
             context,
             "modifiers",
             index,
             entry.object_name,
-        )
-
-        status_row = header.row(align=True)
-        status_row.alignment = "RIGHT"
-        status_row.label(
-            text=labels[entry.status],
-            icon=icons[entry.status],
-        )
-
-        status_row.separator(factor=1.6)
-        draw_result_focus_button(
-            status_row,
-            context,
+            entry.status,
             entry.object_ref,
         )
 
-        if not expanded:
+        if not item_expanded:
             continue
 
         if entry.status == "APPLIED":
@@ -487,19 +455,7 @@ def draw_modifier_results(layout, settings, context):
             else:
                 details.label(text="No disabled modifiers")
 
-        if entry.message:
-            ui_scale = context.preferences.system.ui_scale
-            available_width = context.region.width / ui_scale - 48
-            characters_per_line = max(10, int(available_width / 7))
-
-            message_column = item.column(align=True)
-
-            for paragraph in entry.message.splitlines():
-                for line in textwrap.wrap(
-                    paragraph,
-                    width=characters_per_line,
-                ):
-                    message_column.label(text=line)
+        draw_multiline_message(item, context, entry.message)
 
 
 class GEPREP_PT_modifiers(bpy.types.Panel):
@@ -517,7 +473,9 @@ class GEPREP_PT_modifiers(bpy.types.Panel):
 
         draw_modifier_preview(layout, settings, context)
 
-        layout.operator(
+        col = layout.column()
+        col.scale_y = BUTTON_SCALE_Y
+        col.operator(
             "geprep.apply_modifiers",
             text="Apply Modifiers",
             icon="CHECKMARK",
@@ -533,84 +491,35 @@ def draw_mesh_results(layout, settings, context):
     if not results:
         return
 
-    box = layout.box()
-    box.prop(
+    box, expanded = draw_results_box(
+        layout,
         ui,
         "mesh_results_expanded",
-        text=f"Last Mesh Check ({len(results)})",
-        icon=(
-            "TRIA_DOWN"
-            if ui.mesh_results_expanded
-            else "TRIA_RIGHT"
-        ),
-        emboss=False,
+        "Last Mesh Check",
+        len(results),
     )
-
-    if not ui.mesh_results_expanded:
+    if not expanded:
         return
 
     box.label(
         text=f"Check distance: {settings.mesh_checked_distance:g} m"
     )
 
-    icons = {
-        "PASSED": "CHECKMARK",
-        "INSPECT": "INFO",
-        "FAILED": "ERROR",
-    }
-
-    labels = {
-        "PASSED": "No Findings",
-        "INSPECT": "Inspect",
-        "FAILED": "Failed",
-    }
-
     for index, entry in enumerate(results):
-        item = box.box()
-        item.alert = entry.status == "FAILED"
-
-        header = item.row(align=True)
-
-        name_row = header.row(align=True)
-        name_row.alignment = "LEFT"
-        expanded = draw_result_details_toggle(
-            name_row,
+        item, item_expanded = draw_result_item_header(
+            box,
             context,
             "mesh",
             index,
             entry.object_name,
-        )
-
-        status_row = header.row(align=True)
-        status_row.alignment = "RIGHT"
-        status_row.label(
-            text=labels[entry.status],
-            icon=icons[entry.status],
-        )
-
-        status_row.separator(factor=1.6)
-        draw_result_focus_button(
-            status_row,
-            context,
+            entry.status,
             entry.object_ref,
         )
 
-        if not expanded:
+        if not item_expanded:
             continue
 
-        if entry.message:
-            ui_scale = context.preferences.system.ui_scale
-            available_width = context.region.width / ui_scale - 48
-            characters_per_line = max(10, int(available_width / 7))
-
-            message_column = item.column(align=True)
-
-            for paragraph in entry.message.splitlines():
-                for line in textwrap.wrap(
-                    paragraph,
-                    width=characters_per_line,
-                ):
-                    message_column.label(text=line)
+        draw_multiline_message(item, context, entry.message)
 
         if entry.status == "FAILED":
             continue
@@ -675,84 +584,33 @@ def draw_mesh_fix_results(layout, settings, context):
     if not results:
         return
 
-    box = layout.box()
-    box.prop(
+    box, expanded = draw_results_box(
+        layout,
         ui,
         "mesh_fix_results_expanded",
-        text=f"Last Mesh Fix Results ({len(results)})",
-        icon=(
-            "TRIA_DOWN"
-            if ui.mesh_fix_results_expanded
-            else "TRIA_RIGHT"
-        ),
-        emboss=False,
+        "Last Mesh Fix Results",
+        len(results),
     )
-
-    if not ui.mesh_fix_results_expanded:
+    if not expanded:
         return
 
     box.label(text=settings.mesh_fix_action)
 
-    icons = {
-        "CHANGED": "CHECKMARK",
-        "SKIPPED": "INFO",
-        "FAILED": "ERROR",
-        "INCOMPLETE": "ERROR",
-    }
-
-    labels = {
-        "CHANGED": "Changed",
-        "SKIPPED": "Skipped",
-        "FAILED": "Failed",
-        "INCOMPLETE": "Recovery Failed",
-    }
-
     for index, entry in enumerate(results):
-        item = box.box()
-        item.alert = entry.status in {"FAILED", "INCOMPLETE"}
-
-        header = item.row(align=True)
-
-        name_row = header.row(align=True)
-        name_row.alignment = "LEFT"
-        expanded = draw_result_details_toggle(
-            name_row,
+        item, item_expanded = draw_result_item_header(
+            box,
             context,
             "mesh_fixes",
             index,
             entry.object_name,
-        )
-
-        status_row = header.row(align=True)
-        status_row.alignment = "RIGHT"
-        status_row.label(
-            text=labels[entry.status],
-            icon=icons[entry.status],
-        )
-
-        status_row.separator(factor=1.6)
-        draw_result_focus_button(
-            status_row,
-            context,
+            entry.status,
             entry.object_ref,
         )
 
-        if not expanded:
+        if not item_expanded:
             continue
 
-        if entry.message:
-            ui_scale = context.preferences.system.ui_scale
-            available_width = context.region.width / ui_scale - 48
-            characters_per_line = max(10, int(available_width / 7))
-
-            message_column = item.column(align=True)
-
-            for paragraph in entry.message.splitlines():
-                for line in textwrap.wrap(
-                    paragraph,
-                    width=characters_per_line,
-                ):
-                    message_column.label(text=line)
+        draw_multiline_message(item, context, entry.message)
 
 
 class GEPREP_PT_mesh(bpy.types.Panel):
@@ -767,66 +625,92 @@ class GEPREP_PT_mesh(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         settings = context.scene.geprep
+        ui = context.window_manager.geprep_ui
 
-        layout.prop(settings, "mesh_distance")
+        check_box = layout.box()
+        check_box.label(text="Geometry Check")
+        col = check_box.column()
+        col.scale_y = INPUT_SCALE_Y
+        col.prop(settings, "mesh_distance")
 
-        layout.operator(
+        col = check_box.column()
+        col.scale_y = BUTTON_SCALE_Y
+        col.operator(
             "geprep.check_mesh",
             text="Check Mesh",
             icon="VIEWZOOM",
         )
 
-        ui = context.window_manager.geprep_ui
-        layout.prop(ui, "mesh_zoom_selection")
-        layout.prop(ui, "mesh_xray_selection")
+        col = check_box.column()
+        col.scale_y = INPUT_SCALE_Y
+        col.prop(ui, "mesh_zoom_selection")
+        col.prop(ui, "mesh_xray_selection")
 
         draw_mesh_results(layout, settings, context)
 
-        fixes = layout.box()
-        fixes.label(text="Mesh Fixes")
-
-        button = fixes.operator(
-            "geprep.mesh_fix",
-            text="Remove Loose Geometry",
+        fixes_main = layout.box()
+        fixes_main.use_property_split = False
+        fixes_main.prop(
+            ui,
+            "mesh_fixes_expanded",
+            text="Mesh Fixes",
+            icon="TRIA_DOWN" if ui.mesh_fixes_expanded else "TRIA_RIGHT",
+            emboss=False,
         )
-        button.action = "LOOSE"
 
-        fixes.separator()
-        fixes.prop(settings, "mesh_merge_distance")
+        if ui.mesh_fixes_expanded:
+            box = fixes_main.box()
+            col = box.column()
+            col.scale_y = BUTTON_SCALE_Y
+            button = col.operator(
+                "geprep.mesh_fix",
+                text="Remove Loose Geometry",
+            )
+            button.action = "LOOSE"
 
-        button = fixes.operator(
-            "geprep.mesh_fix",
-            text="Merge by Distance",
-        )
-        button.action = "MERGE"
+            box = fixes_main.box()
+            col = box.column()
+            col.scale_y = INPUT_SCALE_Y
+            col.prop(settings, "mesh_merge_distance")
+            col = box.column()
+            col.scale_y = BUTTON_SCALE_Y
+            button = col.operator(
+                "geprep.mesh_fix",
+                text="Merge by Distance",
+            )
+            button.action = "MERGE"
 
-        fixes.separator()
+            box = fixes_main.box()
+            col = box.column()
+            col.scale_y = INPUT_SCALE_Y
+            col.prop(settings, "mesh_dissolve_distance")
+            col = box.column()
+            col.scale_y = BUTTON_SCALE_Y
+            button = col.operator(
+                "geprep.mesh_fix",
+                text="Dissolve Degenerate Geometry",
+            )
+            button.action = "DEGENERATE"
 
-        button = fixes.operator(
-            "geprep.mesh_fix",
-            text="Recalculate Normals Outside",
-        )
-        button.action = "NORMALS"
+            box = fixes_main.box()
+            col = box.column()
+            col.scale_y = BUTTON_SCALE_Y
+            button = col.operator(
+                "geprep.mesh_fix",
+                text="Recalculate Normals Outside",
+            )
+            button.action = "NORMALS"
 
-        fixes.separator()
+            box = fixes_main.box()
+            col = box.column()
+            col.scale_y = BUTTON_SCALE_Y
+            button = col.operator(
+                "geprep.mesh_fix",
+                text="Triangulate",
+            )
+            button.action = "TRIANGULATE"
 
-        button = fixes.operator(
-            "geprep.mesh_fix",
-            text="Triangulate",
-        )
-        button.action = "TRIANGULATE"
-
-        fixes.separator()
-
-        fixes.prop(settings, "mesh_dissolve_distance")
-
-        button = fixes.operator(
-            "geprep.mesh_fix",
-            text="Dissolve Degenerate Geometry",
-        )
-        button.action = "DEGENERATE"
-
-        draw_mesh_fix_results(fixes, settings, context)
+        draw_mesh_fix_results(layout, settings, context)
 
 
 def draw_uv_results(layout, settings, context):
@@ -836,20 +720,14 @@ def draw_uv_results(layout, settings, context):
     if not results:
         return
 
-    box = layout.box()
-    box.prop(
+    box, expanded = draw_results_box(
+        layout,
         ui,
         "uv_results_expanded",
-        text=f"Last UV Check ({len(results)})",
-        icon=(
-            "TRIA_DOWN"
-            if ui.uv_results_expanded
-            else "TRIA_RIGHT"
-        ),
-        emboss=False,
+        "Last UV Check",
+        len(results),
     )
-
-    if not ui.uv_results_expanded:
+    if not expanded:
         return
 
     box.label(
@@ -865,64 +743,21 @@ def draw_uv_results(layout, settings, context):
         )
     )
 
-    icons = {
-        "PASSED": "CHECKMARK",
-        "INSPECT": "INFO",
-        "FAILED": "ERROR",
-    }
-
-    labels = {
-        "PASSED": "No Findings",
-        "INSPECT": "Inspect",
-        "FAILED": "Failed",
-    }
-
     for index, entry in enumerate(results):
-        item = box.box()
-        item.alert = entry.status == "FAILED"
-
-        header = item.row(align=True)
-
-        name_row = header.row(align=True)
-        name_row.alignment = "LEFT"
-        expanded = draw_result_details_toggle(
-            name_row,
+        item, item_expanded = draw_result_item_header(
+            box,
             context,
             "uv",
             index,
             entry.object_name,
-        )
-
-        status_row = header.row(align=True)
-        status_row.alignment = "RIGHT"
-        status_row.label(
-            text=labels[entry.status],
-            icon=icons[entry.status],
-        )
-
-        status_row.separator(factor=1.6)
-        draw_result_focus_button(
-            status_row,
-            context,
+            entry.status,
             entry.object_ref,
         )
 
-        if not expanded:
+        if not item_expanded:
             continue
 
-        if entry.message:
-            ui_scale = context.preferences.system.ui_scale
-            available_width = context.region.width / ui_scale - 48
-            characters_per_line = max(10, int(available_width / 7))
-
-            message_column = item.column(align=True)
-
-            for paragraph in entry.message.splitlines():
-                for line in textwrap.wrap(
-                    paragraph,
-                    width=characters_per_line,
-                ):
-                    message_column.label(text=line)
+        draw_multiline_message(item, context, entry.message)
 
         if entry.status == "FAILED":
             continue
@@ -943,8 +778,10 @@ def draw_uv_results(layout, settings, context):
         if entry.density_available and entry.islands > 1:
             values.append((
                 "Island Range",
-                f"{entry.minimum_density:.2f}–"
-                f"{entry.maximum_density:.2f}",
+                (
+                    f"{entry.minimum_density:.2f}–"
+                    f"{entry.maximum_density:.2f}"
+                ),
             ))
 
         for label, value in values:
@@ -1001,82 +838,31 @@ def draw_uv_density_results(layout, settings, context):
     if not results:
         return
 
-    box = layout.box()
-    box.prop(
+    box, expanded = draw_results_box(
+        layout,
         ui,
         "uv_density_results_expanded",
-        text=f"Last Set Density Results ({len(results)})",
-        icon=(
-            "TRIA_DOWN"
-            if ui.uv_density_results_expanded
-            else "TRIA_RIGHT"
-        ),
-        emboss=False,
+        "Last Set Density Results",
+        len(results),
     )
-
-    if not ui.uv_density_results_expanded:
+    if not expanded:
         return
 
-    icons = {
-        "CHANGED": "CHECKMARK",
-        "SKIPPED": "INFO",
-        "FAILED": "ERROR",
-        "INCOMPLETE": "ERROR",
-    }
-
-    labels = {
-        "CHANGED": "Changed",
-        "SKIPPED": "Skipped",
-        "FAILED": "Failed",
-        "INCOMPLETE": "Recovery Failed",
-    }
-
     for index, entry in enumerate(results):
-        item = box.box()
-        item.alert = entry.status in {"FAILED", "INCOMPLETE"}
-
-        header = item.row(align=True)
-
-        name_row = header.row(align=True)
-        name_row.alignment = "LEFT"
-        expanded = draw_result_details_toggle(
-            name_row,
+        item, item_expanded = draw_result_item_header(
+            box,
             context,
             "uv_density",
             index,
             entry.object_name,
-        )
-
-        status_row = header.row(align=True)
-        status_row.alignment = "RIGHT"
-        status_row.label(
-            text=labels[entry.status],
-            icon=icons[entry.status],
-        )
-
-        status_row.separator(factor=1.6)
-        draw_result_focus_button(
-            status_row,
-            context,
+            entry.status,
             entry.object_ref,
         )
 
-        if not expanded:
+        if not item_expanded:
             continue
 
-        if entry.message:
-            ui_scale = context.preferences.system.ui_scale
-            available_width = context.region.width / ui_scale - 48
-            characters_per_line = max(10, int(available_width / 7))
-
-            message_column = item.column(align=True)
-
-            for paragraph in entry.message.splitlines():
-                for line in textwrap.wrap(
-                    paragraph,
-                    width=characters_per_line,
-                ):
-                    message_column.label(text=line)
+        draw_multiline_message(item, context, entry.message)
 
 
 class GEPREP_PT_uv(bpy.types.Panel):
@@ -1093,8 +879,14 @@ class GEPREP_PT_uv(bpy.types.Panel):
         settings = context.scene.geprep
         active = context.view_layer.objects.active
 
+        density_box = layout.box()
+        density_box.label(text="Texel Density")
+
+        col = density_box.column()
+        col.scale_y = INPUT_SCALE_Y
+
         if active is not None and active.type == "MESH":
-            layout.prop_search(
+            col.prop_search(
                 settings,
                 "uv_map_name",
                 active.data,
@@ -1102,28 +894,29 @@ class GEPREP_PT_uv(bpy.types.Panel):
                 text="UV Map",
             )
         else:
-            layout.prop(settings, "uv_map_name")
+            col.prop(settings, "uv_map_name")
 
-        layout.prop(
+        col.prop(
             settings,
             "uv_texture_preset",
             text="Texture",
         )
 
         if settings.uv_texture_preset == "CUSTOM":
-            row = layout.row(align=True)
+            row = col.row(align=True)
             row.prop(settings, "uv_texture_width")
             row.prop(settings, "uv_texture_height")
 
-        layout.prop(settings, "uv_density_preset")
+        col.prop(settings, "uv_density_preset")
 
         if settings.uv_density_preset == "CUSTOM":
-            layout.prop(settings, "uv_target_density")
+            col.prop(settings, "uv_target_density")
 
-        layout.prop(settings, "uv_tolerance")
+        col.prop(settings, "uv_tolerance")
 
-        row = layout.row(align=True)
-
+        col = density_box.column()
+        col.scale_y = BUTTON_SCALE_Y
+        row = col.row(align=True)
         row.operator(
             "geprep.check_uvs",
             text="Check UVs",
@@ -1137,9 +930,11 @@ class GEPREP_PT_uv(bpy.types.Panel):
         draw_uv_results(layout, settings, context)
         draw_uv_density_results(layout, settings, context)
 
-        layout.separator()
-
-        row = layout.row(align=True)
+        checker_box = layout.box()
+        checker_box.label(text="Checker Preview")
+        col = checker_box.column()
+        col.scale_y = BUTTON_SCALE_Y
+        row = col.row(align=True)
         row.operator(
             "geprep.checker_preview",
             text="Checker",

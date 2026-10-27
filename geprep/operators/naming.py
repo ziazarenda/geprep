@@ -27,11 +27,11 @@ class GEPREP_OT_rename_objects(bpy.types.Operator):
 
     action: bpy.props.EnumProperty(
         items=(
-            ("BASE", "Set Base Name", "Rename selected objects"),
+            ("NEW", "Set New Name", "Rename selected objects"),
             ("REPLACE", "Find & Replace", "Replace case-sensitive text"),
             ("SUFFIX", "Remove Numeric Suffix", "Remove trailing .001-style numbers"),
         ),
-        default="BASE",
+        default="NEW",
         options={"HIDDEN"},
     )
 
@@ -69,7 +69,7 @@ class GEPREP_OT_rename_objects(bpy.types.Operator):
                     if obj.library is None
                 ),
                 self.action,
-                base=settings.name_base,
+                new_name=settings.name_new,
                 find=settings.name_find,
                 replacement=settings.name_replace,
             )

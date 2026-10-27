@@ -137,6 +137,11 @@ class GEPREP_PG_ui(bpy.types.PropertyGroup):
         options={"SKIP_SAVE"},
     )
 
+    mesh_fixes_expanded: bpy.props.BoolProperty(
+        default=False,
+        options={"SKIP_SAVE"},
+    )
+
     mesh_fix_results_expanded: bpy.props.BoolProperty(
         default=True,
         options={"SKIP_SAVE"},
@@ -311,9 +316,9 @@ class GEPREP_PG_checker_record(bpy.types.PropertyGroup):
 
 
 class GEPREP_PG_settings(bpy.types.PropertyGroup):
-    name_base: bpy.props.StringProperty(
-        name="Base Name",
-        description="Base name for the selected objects",
+    name_new: bpy.props.StringProperty(
+        name="Name",
+        description="New name for the selected objects",
     )
 
     name_find: bpy.props.StringProperty(
