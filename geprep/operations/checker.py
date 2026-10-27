@@ -68,13 +68,25 @@ def create_checker_material(uv_name, width, height):
         raise
 
 
-def restore_checker_materials(record):
-    """Restore one object's materials without replacing its mesh."""
-    obj = record.object_ref
-    checker = record.checker
+def has_checker_preview(obj):
+    """Return whether this object carries a stored checker preview."""
+    return obj is not None and obj.geprep_checker.active
 
-    if obj is None:
-        return
+
+def clear_checker_state(obj):
+    """Forget the stored checker state of one object."""
+    state = obj.geprep_checker
+    state.active = False
+    state.slots.clear()
+    state.checker = None
+    state.temporary_slot = False
+    state.active_material_index = 0
+
+
+def restore_checker_materials(obj):
+    """Restore one object's materials without replacing its mesh."""
+    record = obj.geprep_checker
+    checker = record.checker
 
     if obj.type != "MESH":
         raise ValueError("The object is no longer a mesh")
@@ -153,33 +165,38 @@ def restore_checker_materials(record):
     obj.active_material_index = record.active_material_index
 
 
-def restore_checker_previews(context, records, *, objects=None):
-    """Restore chosen objects; keep records whose restoration fails."""
-    targets = None if objects is None else set(objects)
+def restore_checker_previews(context, *, objects=None):
+    """Restore chosen objects; keep the state of objects that fail.
+
+    The checker state is stored on each object, so a duplicate made with
+    Shift+D carries it along and can be restored on its own.
+    """
+    if objects is None:
+        candidates = list(context.scene.objects)
+    else:
+        candidates = list(objects)
+
     restored = 0
     errors = []
     materials = set()
 
-    for index in reversed(range(len(records))):
-        record = records[index]
-        obj = record.object_ref
-
-        if targets is not None and obj not in targets:
-            continue
-
-        name = obj.name if obj is not None else "(Deleted object)"
-
-        if record.checker is not None:
-            materials.add(record.checker)
+    for obj in sorted(
+        (obj for obj in candidates if has_checker_preview(obj)),
+        key=lambda obj: (obj.name.casefold(), obj.name),
+    ):
+        checker = obj.geprep_checker.checker
 
         try:
-            restore_checker_materials(record)
+            restore_checker_materials(obj)
             context.view_layer.update()
-            records.remove(index)
+            clear_checker_state(obj)
             restored += 1
 
+            if checker is not None:
+                materials.add(checker)
+
         except Exception as error:
-            errors.append(f"{name}: {error}")
+            errors.append(f"{obj.name}: {error}")
 
     for material in materials:
         try:
@@ -201,7 +218,6 @@ class CheckerRecoveryError(RuntimeError):
 def apply_checker_preview(
     context,
     obj,
-    records,
     *,
     uv_name="",
     width=2048,
@@ -224,7 +240,7 @@ def apply_checker_preview(
     ):
         raise ValueError("Use an editable local object")
 
-    if any(record.object_ref == obj for record in records):
+    if has_checker_preview(obj):
         raise ValueError("This object already has a checker preview")
 
     name, _ = read_uv_map(obj.data, uv_name)
@@ -267,7 +283,8 @@ def apply_checker_preview(
 
     checker = None
     working_mesh = None
-    record_index = None
+    record = obj.geprep_checker
+    record_started = False
     assignment_started = False
     stage = "create checker material"
 
@@ -275,9 +292,8 @@ def apply_checker_preview(
         checker = create_checker_material(name, width, height)
 
         stage = "record original materials"
-        record_index = len(records)
-        record = records.add()
-        record.object_ref = obj
+        record_started = True
+        record.active = True
         record.checker = checker
         record.temporary_slot = temporary_slot
         record.active_material_index = original_active
@@ -328,7 +344,7 @@ def apply_checker_preview(
                     obj.data = original_mesh
                     obj.active_material_index = original_active
                 else:
-                    restore_checker_materials(record)
+                    restore_checker_materials(obj)
 
                 context.view_layer.update()
 
@@ -339,8 +355,8 @@ def apply_checker_preview(
 
             recovery_stage = "remove restoration record"
 
-            if record_index is not None:
-                records.remove(record_index)
+            if record_started:
+                clear_checker_state(obj)
 
             recovery_stage = "remove unused checker material"
 

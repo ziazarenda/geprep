@@ -286,8 +286,10 @@ class GEPREP_PG_checker_slot(bpy.types.PropertyGroup):
 
 
 class GEPREP_PG_checker_record(bpy.types.PropertyGroup):
-    object_ref: bpy.props.PointerProperty(
-        type=bpy.types.Object,
+    """Checker state stored on the object so duplicates inherit it."""
+
+    active: bpy.props.BoolProperty(
+        default=False,
     )
 
     slots: bpy.props.CollectionProperty(
@@ -517,14 +519,13 @@ class GEPREP_PG_settings(bpy.types.PropertyGroup):
         options={"SKIP_SAVE"},
     )
 
-    checker_records: bpy.props.CollectionProperty(
-        type=GEPREP_PG_checker_record,
-    )
-
 
 def register():
     bpy.types.Scene.geprep = bpy.props.PointerProperty(
         type=GEPREP_PG_settings,
+    )
+    bpy.types.Object.geprep_checker = bpy.props.PointerProperty(
+        type=GEPREP_PG_checker_record,
     )
     bpy.types.WindowManager.geprep_ui = bpy.props.PointerProperty(
         type=GEPREP_PG_ui,
@@ -534,4 +535,5 @@ def register():
 
 def unregister():
     del bpy.types.WindowManager.geprep_ui
+    del bpy.types.Object.geprep_checker
     del bpy.types.Scene.geprep

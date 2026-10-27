@@ -47,10 +47,7 @@ def validate_prepare_sources(context, sources, *, apply_rotation_scale=False):
     problems = []
 
     for obj in sources:
-        if any(
-            record.object_ref == obj
-            for record in context.scene.geprep.checker_records
-        ):
+        if obj.geprep_checker.active:
             problems.append(
                 "Remove the checker before creating prepared copies"
             )
@@ -670,10 +667,7 @@ def remove_prepare_batch(context, batches, index):
             "Reparent those children before removing the batch"
         )
 
-    if any(
-        record.object_ref in duplicates
-        for record in context.scene.geprep.checker_records
-    ):
+    if any(duplicate.geprep_checker.active for duplicate in duplicates):
         raise ValueError(
             "Remove the checker from the prepared copies "
             "before removing this batch"

@@ -5,6 +5,7 @@ import bpy
 from ..operations.checker import (
     CheckerRecoveryError,
     apply_checker_preview,
+    has_checker_preview,
     restore_checker_previews,
 )
 
@@ -45,7 +46,6 @@ class GEPREP_OT_checker_preview(bpy.types.Operator):
                 apply_checker_preview(
                     context,
                     obj,
-                    settings.checker_records,
                     uv_name=settings.uv_map_name,
                     width=settings.uv_texture_width,
                     height=settings.uv_texture_height,
@@ -95,17 +95,14 @@ class GEPREP_OT_restore_checker(bpy.types.Operator):
         if context.mode != "OBJECT" or not context.scene.is_editable:
             return False
 
-        selected = set(context.selected_objects)
-
         return any(
-            record.object_ref in selected
-            for record in context.scene.geprep.checker_records
+            has_checker_preview(obj)
+            for obj in context.selected_objects
         )
 
     def execute(self, context):
         restored, errors = restore_checker_previews(
             context,
-            context.scene.geprep.checker_records,
             objects=context.selected_objects,
         )
 
