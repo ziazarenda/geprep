@@ -1189,7 +1189,12 @@ def select_link_function(self, tag):
     """
 
     # -- Default, universal case (and is the only option for GitLab/Bitbucket)
-    link = tag["zipball_url"]
+    link = tag["zipball_url"] # fallback
+
+    for asset in tag.get("assets", []):
+        if asset.get("name", "").endswith(".zip"):
+            link = asset["browser_download_url"]
+            break
 
     # -- Example: select the first (or only) asset instead source code --
     # if "assets" in tag and "browser_download_url" in tag["assets"][0]:
@@ -1247,16 +1252,16 @@ def register(bl_info):
     updater.private_token = None  # "tokenstring"
 
     # Choose your own username, must match website (not needed for GitLab).
-    updater.user = "YOUR_GITHUB_USERNAME"
+    updater.user = "ziazarenda"
 
     # Choose your own repository, must match git name for GitHUb and Bitbucket,
     # for GitLab use project ID (numbers only).
-    updater.repo = "YOUR_REPOSITORY_NAME"
+    updater.repo = "geprep"
 
     # updater.addon = # define at top of module, MUST be done first
 
     # Website for manual addon download, optional but recommended to set.
-    updater.website = "https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPOSITORY_NAME"
+    updater.website = "https://github.com/ziazarenda/geprep"
 
     # Addon subfolder path.
     # "sample/path/to/addon"
@@ -1272,7 +1277,7 @@ def register(bl_info):
 
     # Optional, consider turning off for production or allow as an option
     # This will print out additional debugging info to the console
-    updater.verbose = True  # make False for production default
+    updater.verbose = False  # make False for production default
 
     # Optional, customize where the addon updater processing subfolder is,
     # essentially a staging folder used by the updater on its own
@@ -1337,13 +1342,13 @@ def register(bl_info):
     # but the user has the option from user preferences to directly
     # update to the master branch or any other branches specified using
     # the "install {branch}/older version" operator.
-    updater.include_branches = True
+    updater.include_branches = False
 
     # (GitHub only) This options allows using "releases" instead of "tags",
     # which enables pulling down release logs/notes, as well as installs update
     # from release-attached zips (instead of the auto-packaged code generated
     # with a release/tag). Setting has no impact on BitBucket or GitLab repos.
-    updater.use_releases = False
+    updater.use_releases = True
     # Note: Releases always have a tag, but a tag may not always be a release.
     # Therefore, setting True above will filter out any non-annotated tags.
     # Note 2: Using this option will also display (and filter by) the release
@@ -1354,7 +1359,7 @@ def register(bl_info):
     # Note: updater.include_branch_list defaults to ['master'] branch if set to
     # none. Example targeting another multiple branches allowed to pull from:
     # updater.include_branch_list = ['master', 'dev']
-    updater.include_branch_list = None  # None is the equivalent = ['master']
+    updater.include_branch_list = ["main"] # None is the equivalent = ['master']
 
     # Only allow manual install, thus prompting the user to open
     # the addon's web page to download, specifically: updater.website
