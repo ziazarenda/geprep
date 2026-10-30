@@ -4,6 +4,7 @@ import bmesh
 import bpy
 import numpy as np
 
+from ..helpers.progress import with_progress
 from ..operations.uv_orientation import (
     MIRROR_ACTION,
     ORIENTATION_ACTIONS,
@@ -60,7 +61,7 @@ class GEPREP_OT_orient_uvs(bpy.types.Operator):
         changed = islands = selected_total = failed = 0
         failures = []
 
-        for obj in objects:
+        for obj in with_progress(context, objects):
             changes = []
 
             try:

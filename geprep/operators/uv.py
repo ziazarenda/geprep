@@ -7,7 +7,7 @@ from ..helpers.objects import (
     has_selected_mesh,
     selected_meshes,
 )
-
+from ..helpers.progress import with_progress
 from ..operations.mesh import (
     MeshFixRecoveryError,
     select_mesh_elements,
@@ -45,7 +45,7 @@ def run_uv_check(context, objects):
 
     context.window_manager.geprep_ui.uv_results_expanded = True
 
-    for obj in objects:
+    for obj in with_progress(context, objects):
         entry = results.add()
         entry.object_ref = obj
         entry.object_name = obj.name
@@ -332,7 +332,7 @@ class GEPREP_OT_set_uv_density(bpy.types.Operator):
 
         recovery_failed = False
 
-        for obj in objects:
+        for obj in with_progress(context, objects):
             entry = results.add()
             entry.object_ref = obj
             entry.object_name = obj.name

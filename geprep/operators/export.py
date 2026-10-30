@@ -4,6 +4,7 @@ import traceback
 import bpy
 
 from ..helpers.objects import has_selected_mesh, selected_meshes
+from ..helpers.progress import with_progress
 from ..operations.export import (
     ExportBlockedError,
     default_glb_name,
@@ -78,74 +79,68 @@ def run_glb_export(context, objects, folder, unit_scale):
     results.clear()
     context.window_manager.geprep_ui.export_results_expanded = True
     counts = {"EXPORTED": 0, "SKIPPED": 0, "FAILED": 0}
-    manager = context.window_manager
-    manager.progress_begin(0, len(jobs))
 
-    try:
-        for index, (destination, members) in enumerate(jobs):
-            manager.progress_update(index)
-            entry = results.add()
-            entry.filename = os.path.basename(destination)
-            entry.filepath = destination
+    for destination, members in with_progress(context, jobs, minimum=1):
+        entry = results.add()
+        entry.filename = os.path.basename(destination)
+        entry.filepath = destination
 
-            try:
-                if (
-                    os.path.lexists(destination)
-                    and not settings.export_overwrite
-                ):
-                    raise FileExistsError(
-                        "File already exists. "
-                        "Enable Overwrite Existing Files to replace it"
+        try:
+            if (
+                os.path.lexists(destination)
+                and not settings.export_overwrite
+            ):
+                raise FileExistsError(
+                    "File already exists. "
+                    "Enable Overwrite Existing Files to replace it"
+                )
+
+            size = export_glb_job(
+                context,
+                members,
+                destination,
+                settings.export_mode,
+                unit_scale,
+                materials=settings.export_materials,
+                tangents=settings.export_tangents,
+                overwrite=settings.export_overwrite,
+            )
+            entry.status = "EXPORTED"
+            message = (
+                f"{len(members)} mesh(es), {format_size(size)}"
+            )
+
+            if settings.export_materials:
+                try:
+                    notes = material_notes(settings, members)
+                except Exception:
+                    # The file is already written; the notes are a bonus.
+                    traceback.print_exc()
+                    notes = []
+
+                if notes:
+                    message += (
+                        "\nMaterial problems the file may not show:\n"
+                        + summarize_notes(notes)
                     )
 
-                size = export_glb_job(
-                    context,
-                    members,
-                    destination,
-                    settings.export_mode,
-                    unit_scale,
-                    materials=settings.export_materials,
-                    tangents=settings.export_tangents,
-                    overwrite=settings.export_overwrite,
-                )
-                entry.status = "EXPORTED"
-                message = (
-                    f"{len(members)} mesh(es), {format_size(size)}"
-                )
+            entry.message = message
 
-                if settings.export_materials:
-                    try:
-                        notes = material_notes(settings, members)
-                    except Exception:
-                        # The file is already written; the notes are a bonus.
-                        traceback.print_exc()
-                        notes = []
+        except FileExistsError as error:
+            entry.status = "SKIPPED"
+            entry.message = str(error)
 
-                    if notes:
-                        message += (
-                            "\nMaterial problems the file may not show:\n"
-                            + summarize_notes(notes)
-                        )
+        except ExportBlockedError as error:
+            # Expected and fixable: the message says what to do.
+            entry.status = "FAILED"
+            entry.message = str(error)
 
-                entry.message = message
+        except Exception as error:
+            traceback.print_exc()
+            entry.status = "FAILED"
+            entry.message = str(error)
 
-            except FileExistsError as error:
-                entry.status = "SKIPPED"
-                entry.message = str(error)
-
-            except ExportBlockedError as error:
-                # Expected and fixable: the message says what to do.
-                entry.status = "FAILED"
-                entry.message = str(error)
-
-            except Exception as error:
-                traceback.print_exc()
-                entry.status = "FAILED"
-                entry.message = str(error)
-
-            counts[entry.status] += 1
-    finally:
-        manager.progress_end()
+        counts[entry.status] += 1
 
     return counts["EXPORTED"], counts["SKIPPED"], counts["FAILED"]
 
