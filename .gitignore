@@ -218,3 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Blender
+*.blend1
+*.blend@
+
+# OS
+.DS_Store
