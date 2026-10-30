@@ -4,7 +4,7 @@
 Logic tests that run with a normal Python (numpy required). They load the
 add-on's modules with small stand-ins for `bpy` and `mathutils`.
 
-    python tests/plain/run_all.py          # all of them
+    python tests/plain/_run_all.py         # all of them
     python tests/plain/origin_logic.py     # one
 
 ## `blender/` – run inside Blender
@@ -30,3 +30,5 @@ them afterwards.
 Manual checks no script covers: Ctrl+Z after Remove Empty Slots and after
 Set Origin, the arrow glyphs in the Origin panel, and the progress
 percentage on a 20+ object selection.
+
+Files starting with `_` (`plain/_run_all.py`, `blender/_run_in_blender.py`) are helpers, not tests. `build.py` and the runners skip them.

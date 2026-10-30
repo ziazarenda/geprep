@@ -1,6 +1,6 @@
 """Run every plain-Python test and print a summary.
 
-    python tests/plain/run_all.py
+    python tests/plain/_run_all.py
 
 These tests need no Blender. They load the add-on's logic modules with
 small stand-ins for bpy and mathutils. They need numpy.
@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 here = Path(__file__).resolve().parent
-tests = sorted(path for path in here.glob("*.py") if path.name != Path(__file__).name)
+tests = sorted(path for path in here.glob("*.py") if not path.name.startswith("_"))
 failed = []
 
 for path in tests:
