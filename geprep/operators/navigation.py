@@ -2,6 +2,8 @@ import traceback
 
 import bpy
 
+from ..helpers.objects import find_object_by_key
+
 
 def can_frame_object(context, obj):
     return (
@@ -38,13 +40,9 @@ class GEPREP_OT_select_frame_object(bpy.types.Operator):
         )
 
     def execute(self, context):
-        target = next(
-            (
-                obj
-                for obj in context.view_layer.objects
-                if str(obj.as_pointer()) == self.object_key
-            ),
-            None,
+        target = find_object_by_key(
+            context.view_layer.objects,
+            self.object_key,
         )
 
         if not can_frame_object(context, target):

@@ -1,6 +1,12 @@
 import bpy
 import traceback
 
+from ..helpers.objects import (
+    find_object_by_key,
+    has_selected_mesh,
+    selected_meshes,
+)
+
 from ..operations.modifiers import (
     ModifierRecoveryError,
     apply_object_modifiers,
@@ -18,13 +24,9 @@ class GEPREP_OT_toggle_modifier_preview(bpy.types.Operator):
     )
 
     def execute(self, context):
-        obj = next(
-            (
-                obj
-                for obj in context.selected_objects
-                if str(obj.as_pointer()) == self.object_key
-            ),
-            None,
+        obj = find_object_by_key(
+            context.selected_objects,
+            self.object_key,
         )
 
         if obj is None:
@@ -70,22 +72,12 @@ class GEPREP_OT_apply_modifiers(bpy.types.Operator):
         return (
             context.mode == "OBJECT"
             and context.scene.is_editable
-            and any(
-                obj.type == "MESH"
-                for obj in context.selected_objects
-            )
+            and has_selected_mesh(context)
         )
 
     def execute(self, context):
         settings = context.scene.geprep
-        objects = sorted(
-            (
-                obj
-                for obj in context.selected_objects
-                if obj.type == "MESH"
-            ),
-            key=lambda obj: (obj.name.casefold(), obj.name),
-        )
+        objects = selected_meshes(context)
 
         results = settings.modifier_results
         results.clear()

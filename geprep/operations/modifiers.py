@@ -1,5 +1,7 @@
 import bpy
 
+from ..helpers.objects import has_animation, restore_material_links
+
 
 def nodes_have_simulation(node_tree, visited=None):
     """Check a node tree and nested groups for simulation zones."""
@@ -24,17 +26,6 @@ def nodes_have_simulation(node_tree, visited=None):
             return True
 
     return False
-
-
-def has_animation(data):
-    """Check for an action, drivers, or NLA tracks."""
-    animation = getattr(data, "animation_data", None)
-
-    return animation is not None and (
-        animation.action is not None
-        or bool(animation.drivers)
-        or bool(animation.nla_tracks)
-    )
 
 
 def validate_modifier_apply(obj):
@@ -166,20 +157,6 @@ def restore_modifier_vertex_groups(obj, groups, active_index):
         obj.vertex_groups.active_index = active_index
 
 
-def restore_modifier_materials(obj, slots):
-    """Restore material links after reassigning the original mesh."""
-    if len(obj.material_slots) != len(slots):
-        raise RuntimeError(
-            "The restored material slot count does not match the backup"
-        )
-
-    for slot, (link, material) in zip(obj.material_slots, slots):
-        slot.link = link
-
-        if link == "OBJECT":
-            slot.material = material
-
-
 def apply_object_modifiers(context, obj):
     """Apply viewport-enabled modifiers and restore the object on failure."""
     if context.mode != "OBJECT":
@@ -291,8 +268,11 @@ def apply_object_modifiers(context, obj):
                 obj.data = original_mesh
 
                 recovery_stage = "restore material assignments"
-                restore_modifier_materials(obj, original_slots)
-                obj.active_material_index = original_material_index
+                restore_material_links(
+                    obj,
+                    original_slots,
+                    original_material_index,
+                )
 
                 recovery_stage = "restore modifier stack"
                 restore_modifier_stack(context, obj, backup)

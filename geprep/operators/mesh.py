@@ -4,6 +4,12 @@ import bpy
 
 from functools import partial
 
+from ..helpers.objects import (
+    find_object_by_key,
+    has_selected_mesh,
+    selected_meshes,
+)
+
 from ..operations.mesh import (
     MESH_FINDINGS,
     MeshFixRecoveryError,
@@ -16,6 +22,38 @@ from ..operations.mesh import (
     inspect_base_mesh,
     select_mesh_elements,
 )
+
+
+# Display order of the fixes in the panel: (action, label, tooltip).
+MESH_FIX_ACTIONS = (
+    (
+        "LOOSE",
+        "Remove Loose Geometry",
+        "Remove isolated vertices and edges without faces",
+    ),
+    (
+        "MERGE",
+        "Merge by Distance",
+        "Merge nearby vertices; may change faces, UVs, and seams",
+    ),
+    (
+        "DEGENERATE",
+        "Dissolve Degenerate Geometry",
+        "Collapse short edges and dissolve degenerate faces",
+    ),
+    (
+        "NORMALS",
+        "Recalculate Normals Outside",
+        "Reorient faces; inspect open surfaces manually",
+    ),
+    (
+        "TRIANGULATE",
+        "Triangulate",
+        "Split quads and n-gons into triangles",
+    ),
+)
+
+MESH_FIX_LABELS = {key: label for key, label, _ in MESH_FIX_ACTIONS}
 
 
 def update_mesh_finding_view(context):
@@ -71,6 +109,79 @@ def update_mesh_finding_view(context):
     return warnings
 
 
+def run_mesh_check(context, objects):
+    """Inspect the base geometry of `objects` and store the results.
+
+    Returns (passed, inspect, failed) counts.
+    """
+    settings = context.scene.geprep
+
+    context.view_layer.update()
+
+    distance = settings.mesh_distance
+    unit_scale = context.scene.unit_settings.scale_length
+
+    results = settings.mesh_results
+    results.clear()
+
+    settings.mesh_checked_distance = distance
+    settings.mesh_checked_units = unit_scale
+    context.window_manager.geprep_ui.mesh_results_expanded = True
+
+    for obj in objects:
+        entry = results.add()
+        entry.object_ref = obj
+        entry.object_name = obj.name
+
+        try:
+            found, totals = inspect_base_mesh(
+                obj.data,
+                obj.matrix_world,
+                unit_scale,
+                distance,
+            )
+
+            for key, indices in found.items():
+                setattr(entry, key, len(indices))
+
+            (
+                entry.vertices,
+                entry.edges,
+                entry.faces,
+                entry.triangles,
+            ) = totals
+
+            if not entry.vertices:
+                entry.status = "INSPECT"
+                entry.message = "Mesh is empty"
+
+            elif any(found.values()):
+                entry.status = "INSPECT"
+
+            else:
+                entry.status = "PASSED"
+
+        except Exception as error:
+            traceback.print_exc()
+            entry.status = "FAILED"
+            entry.message = str(error)
+
+    passed = sum(
+        entry.status == "PASSED"
+        for entry in results
+    )
+    inspect = sum(
+        entry.status == "INSPECT"
+        for entry in results
+    )
+    failed = sum(
+        entry.status == "FAILED"
+        for entry in results
+    )
+
+    return passed, inspect, failed
+
+
 class GEPREP_OT_check_mesh(bpy.types.Operator):
     """Inspect base geometry without modifiers. Recheck after geometry or transform changes. Findings may be intentional."""
 
@@ -83,84 +194,13 @@ class GEPREP_OT_check_mesh(bpy.types.Operator):
         return (
             context.mode == "OBJECT"
             and context.scene.is_editable
-            and any(
-                obj.type == "MESH"
-                for obj in context.selected_objects
-            )
+            and has_selected_mesh(context)
         )
 
     def execute(self, context):
-        settings = context.scene.geprep
-        objects = sorted(
-            (
-                obj
-                for obj in context.selected_objects
-                if obj.type == "MESH"
-            ),
-            key=lambda obj: (obj.name.casefold(), obj.name),
-        )
-
-        context.view_layer.update()
-
-        distance = settings.mesh_distance
-        unit_scale = context.scene.unit_settings.scale_length
-
-        results = settings.mesh_results
-        results.clear()
-
-        settings.mesh_checked_distance = distance
-        settings.mesh_checked_units = unit_scale
-        context.window_manager.geprep_ui.mesh_results_expanded = True
-
-        for obj in objects:
-            entry = results.add()
-            entry.object_ref = obj
-            entry.object_name = obj.name
-
-            try:
-                found, totals = inspect_base_mesh(
-                    obj.data,
-                    obj.matrix_world,
-                    unit_scale,
-                    distance,
-                )
-
-                for key, indices in found.items():
-                    setattr(entry, key, len(indices))
-
-                (
-                    entry.vertices,
-                    entry.edges,
-                    entry.faces,
-                    entry.triangles,
-                ) = totals
-
-                if not entry.vertices:
-                    entry.status = "INSPECT"
-                    entry.message = "Mesh is empty"
-
-                elif any(found.values()):
-                    entry.status = "INSPECT"
-
-                else:
-                    entry.status = "PASSED"
-
-            except Exception as error:
-                traceback.print_exc()
-                entry.status = "FAILED"
-                entry.message = str(error)
-
-        passed = sum(
-            entry.status == "PASSED"
-            for entry in results
-        )
-        inspect = sum(
-            entry.status == "INSPECT"
-            for entry in results
-        )
-        failed = sum(
-            entry.status == "FAILED"
-            for entry in results
+        passed, inspect, failed = run_mesh_check(
+            context,
+            selected_meshes(context),
         )
 
         self.report(
@@ -200,13 +240,9 @@ class GEPREP_OT_select_mesh_finding(bpy.types.Operator):
         )
 
     def execute(self, context):
-        obj = next(
-            (
-                obj
-                for obj in context.view_layer.objects
-                if str(obj.as_pointer()) == self.object_key
-            ),
-            None,
+        obj = find_object_by_key(
+            context.view_layer.objects,
+            self.object_key,
         )
 
         if obj is None or obj.type != "MESH":
@@ -350,33 +386,7 @@ class GEPREP_OT_mesh_fix(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     action: bpy.props.EnumProperty(
-        items=(
-            (
-                "LOOSE",
-                "Remove Loose Geometry",
-                "Remove isolated vertices and edges without faces",
-            ),
-            (
-                "MERGE",
-                "Merge by Distance",
-                "Merge nearby vertices; may change faces, UVs, and seams",
-            ),
-            (
-                "NORMALS",
-                "Recalculate Normals Outside",
-                "Reorient faces; inspect open surfaces manually",
-            ),
-            (
-                "TRIANGULATE",
-                "Triangulate",
-                "Split quads and n-gons into triangles",
-            ),
-            (
-                "DEGENERATE",
-                "Dissolve Degenerate Geometry",
-                "Collapse short edges and dissolve degenerate faces",
-            ),
-        ),
+        items=MESH_FIX_ACTIONS,
         default="LOOSE",
     )
 
@@ -411,33 +421,16 @@ class GEPREP_OT_mesh_fix(bpy.types.Operator):
         return (
             context.mode == "OBJECT"
             and context.scene.is_editable
-            and any(
-                obj.type == "MESH"
-                for obj in context.selected_objects
-            )
+            and has_selected_mesh(context)
         )
 
     def execute(self, context):
         settings = context.scene.geprep
-        objects = sorted(
-            (
-                obj
-                for obj in context.selected_objects
-                if obj.type == "MESH"
-            ),
-            key=lambda obj: (obj.name.casefold(), obj.name),
-        )
+        objects = selected_meshes(context)
 
         results = settings.mesh_fix_results
         results.clear()
-        action_labels = {
-            "LOOSE": "Remove Loose Geometry",
-            "MERGE": "Merge by Distance",
-            "NORMALS": "Recalculate Normals Outside",
-            "TRIANGULATE": "Triangulate",
-            "DEGENERATE": "Dissolve Degenerate Geometry",
-        }
-        settings.mesh_fix_action = action_labels[self.action]
+        settings.mesh_fix_action = MESH_FIX_LABELS[self.action]
         context.window_manager.geprep_ui.mesh_fix_results_expanded = True
 
         recovery_failed = False
@@ -529,10 +522,7 @@ class GEPREP_OT_mesh_fix(bpy.types.Operator):
 
         if changed_count and not incomplete:
             try:
-                result = bpy.ops.geprep.check_mesh()
-
-                if "FINISHED" not in result:
-                    raise RuntimeError("Blender did not finish the mesh check")
+                run_mesh_check(context, selected_meshes(context))
 
             except Exception as error:
                 traceback.print_exc()

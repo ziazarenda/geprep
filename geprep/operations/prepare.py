@@ -1,5 +1,6 @@
 import bpy
 from math import isclose
+from ..helpers.objects import has_animation
 from .naming import remove_numeric_suffix, reserve_name
 
 
@@ -77,13 +78,7 @@ def validate_prepare_sources(context, sources, *, apply_rotation_scale=False):
                     "Disable Apply Rotation & Scale"
                 )
 
-            animation = obj.animation_data
-
-            if animation is not None and (
-                animation.action is not None
-                or animation.drivers
-                or animation.nla_tracks
-            ):
+            if has_animation(obj):
                 problems.append(
                     f"{obj.name!r} has object animation or drivers. "
                     "Disable Apply Rotation & Scale"

@@ -2,14 +2,25 @@ import textwrap
 
 import bpy
 
+from ..helpers.objects import pointer_key, selected_meshes
+from ..operations.checker import CHECKER_STYLES
 from ..operations.mesh import MESH_FINDINGS
 from ..operations.uv import UV_FINDINGS
+from ..operations.uv_orientation import MIRROR_ACTION, ORIENTATION_ACTIONS
+from ..operators.mesh import MESH_FIX_ACTIONS
 from ..operators.navigation import can_frame_object
 
 BUTTON_SCALE_Y = 1.5
 INPUT_SCALE_Y = 1.3
 
+# Mesh fixes that take a distance, and the setting that holds it.
+MESH_FIX_DISTANCE_PROPS = {
+    "MERGE": "mesh_merge_distance",
+    "DEGENERATE": "mesh_dissolve_distance",
+}
+
 RESULT_STATUS_ICONS = {
+    "EXPORTED": "CHECKMARK",
     "CHANGED": "CHECKMARK",
     "PREPARED": "CHECKMARK",
     "RESTORED": "CHECKMARK",
@@ -22,6 +33,7 @@ RESULT_STATUS_ICONS = {
 }
 
 RESULT_STATUS_LABELS = {
+    "EXPORTED": "Exported",
     "CHANGED": "Changed",
     "PREPARED": "Prepared",
     "RESTORED": "Restored",
@@ -34,19 +46,72 @@ RESULT_STATUS_LABELS = {
 }
 
 
-def draw_results_box(layout, ui, prop_name: str, title: str, count: int):
-    """Draw a standardized collapsable box header for result lists."""
+def draw_collapsible_box(
+    layout,
+    ui,
+    prop_name: str,
+    title: str,
+    count: int | None = None,
+):
+    """Draw a box whose header toggles a boolean on the UI settings."""
     box = layout.box()
     box.use_property_split = False
     expanded = getattr(ui, prop_name)
     box.prop(
         ui,
         prop_name,
-        text=f"{title} ({count})",
+        text=title if count is None else f"{title} ({count})",
         icon="TRIA_DOWN" if expanded else "TRIA_RIGHT",
         emboss=False,
     )
     return box, expanded
+
+
+def draw_action_button(
+    layout,
+    idname: str,
+    text: str,
+    *,
+    icon="NONE",
+    **properties,
+):
+    """Draw one tall operator button and set the given operator properties."""
+    col = layout.column()
+    col.scale_y = BUTTON_SCALE_Y
+    button = col.operator(idname, text=text, icon=icon)
+
+    for name, value in properties.items():
+        setattr(button, name, value)
+
+    return button
+
+
+def draw_value_row(layout, label: str, value):
+    """Draw a label on the left and a right-aligned value."""
+    row = layout.row(align=True)
+    row.label(text=label)
+
+    value_row = row.row(align=True)
+    value_row.alignment = "RIGHT"
+    value_row.label(text=str(value))
+
+    return row
+
+
+def draw_finding_select_button(row, context, target, idname: str, finding: str):
+    """Add the 'select this finding' button to a finding row."""
+    row.separator(factor=0.8)
+
+    button_row = row.row(align=True)
+    button_row.enabled = context.mode == "OBJECT" and target is not None
+
+    button = button_row.operator(
+        idname,
+        text="",
+        icon="RESTRICT_SELECT_OFF",
+    )
+    button.object_key = pointer_key(target)
+    button.finding = finding
 
 
 def draw_multiline_message(layout, context, message: str, width_offset: int = 48):
@@ -91,7 +156,7 @@ def draw_result_focus_button(layout, context, target):
         text="",
         icon="VIEWZOOM",
     )
-    button.object_key = str(target.as_pointer()) if target is not None else ""
+    button.object_key = pointer_key(target)
 
 
 def draw_result_item_header(
@@ -146,7 +211,7 @@ def draw_naming_results(layout, settings, context):
     if not results:
         return
 
-    box, expanded = draw_results_box(
+    box, expanded = draw_collapsible_box(
         layout,
         ui,
         "naming_results_expanded",
@@ -195,13 +260,12 @@ class GEPREP_PT_naming(bpy.types.Panel):
         col.scale_y = INPUT_SCALE_Y
         col.prop(settings, "name_new", text="Name")
 
-        col = box.column()
-        col.scale_y = BUTTON_SCALE_Y
-        button = col.operator(
+        draw_action_button(
+            box,
             "geprep.rename_objects",
-            text="Set New Name",
+            "Set New Name",
+            action="NEW",
         )
-        button.action = "NEW"
 
         box = layout.box()
         col = box.column()
@@ -209,22 +273,19 @@ class GEPREP_PT_naming(bpy.types.Panel):
         col.prop(settings, "name_find", text="Replace")
         col.prop(settings, "name_replace", text="With")
 
-        col = box.column()
-        col.scale_y = BUTTON_SCALE_Y
-        button = col.operator(
+        draw_action_button(
+            box,
             "geprep.rename_objects",
-            text="Find & Replace",
+            "Find & Replace",
+            action="REPLACE",
         )
-        button.action = "REPLACE"
 
-        box = layout.box()
-        col = box.column()
-        col.scale_y = BUTTON_SCALE_Y
-        button = col.operator(
+        draw_action_button(
+            layout.box(),
             "geprep.rename_objects",
-            text="Remove Numeric Suffix",
+            "Remove Numeric Suffix",
+            action="SUFFIX",
         )
-        button.action = "SUFFIX"
 
         draw_naming_results(layout, settings, context)
 
@@ -236,7 +297,7 @@ def draw_prepare_results(layout, settings, context):
     if not results:
         return
 
-    box, expanded = draw_results_box(
+    box, expanded = draw_collapsible_box(
         layout,
         ui,
         "prepare_results_expanded",
@@ -295,16 +356,12 @@ class GEPREP_PT_prepare(bpy.types.Panel):
         col.prop(settings, "prepare_duplicate_materials")
         col.prop(settings, "prepare_apply_rotation_scale")
 
-        col = prep_box.column()
-        col.scale_y = BUTTON_SCALE_Y
-        col.operator("geprep.prepare_copy", text="Prepare Copy")
+        draw_action_button(prep_box, "geprep.prepare_copy", "Prepare Copy")
 
-        clean_box = layout.box()
-        col = clean_box.column()
-        col.scale_y = BUTTON_SCALE_Y
-        col.operator(
+        draw_action_button(
+            layout.box(),
             "geprep.remove_prepared_copies",
-            text="Remove Prepared Copies",
+            "Remove Prepared Copies",
         )
 
         draw_prepare_results(layout, settings, context)
@@ -313,14 +370,7 @@ class GEPREP_PT_prepare(bpy.types.Panel):
 def draw_modifier_preview(layout, settings, context):
     ui = context.window_manager.geprep_ui
 
-    objects = sorted(
-        (
-            obj
-            for obj in context.selected_objects
-            if obj.type == "MESH"
-        ),
-        key=lambda obj: (obj.name.casefold(), obj.name),
-    )
+    objects = selected_meshes(context)
 
     if not objects:
         layout.label(
@@ -329,21 +379,15 @@ def draw_modifier_preview(layout, settings, context):
         )
         return
 
-    box = layout.box()
-    box.use_property_split = False
-    box.prop(
+    box, expanded = draw_collapsible_box(
+        layout,
         ui,
         "modifier_preview_expanded",
-        text=f"Selected Meshes ({len(objects)})",
-        icon=(
-            "TRIA_DOWN"
-            if ui.modifier_preview_expanded
-            else "TRIA_RIGHT"
-        ),
-        emboss=False,
+        "Selected Meshes",
+        len(objects),
     )
 
-    if not ui.modifier_preview_expanded:
+    if not expanded:
         return
 
     for obj in objects:
@@ -369,7 +413,7 @@ def draw_modifier_preview(layout, settings, context):
             icon="TRIA_DOWN" if expanded else "TRIA_RIGHT",
             emboss=False,
         )
-        button.object_key = str(obj.as_pointer())
+        button.object_key = pointer_key(obj)
 
         focus_row = header.row(align=True)
         focus_row.alignment = "RIGHT"
@@ -420,7 +464,7 @@ def draw_modifier_results(layout, settings, context):
     if not results:
         return
 
-    box, expanded = draw_results_box(
+    box, expanded = draw_collapsible_box(
         layout,
         ui,
         "modifier_results_expanded",
@@ -473,11 +517,10 @@ class GEPREP_PT_modifiers(bpy.types.Panel):
 
         draw_modifier_preview(layout, settings, context)
 
-        col = layout.column()
-        col.scale_y = BUTTON_SCALE_Y
-        col.operator(
+        draw_action_button(
+            layout,
             "geprep.apply_modifiers",
-            text="Apply Modifiers",
+            "Apply Modifiers",
             icon="CHECKMARK",
         )
 
@@ -491,7 +534,7 @@ def draw_mesh_results(layout, settings, context):
     if not results:
         return
 
-    box, expanded = draw_results_box(
+    box, expanded = draw_collapsible_box(
         layout,
         ui,
         "mesh_results_expanded",
@@ -532,12 +575,7 @@ def draw_mesh_results(layout, settings, context):
             ("Faces", entry.faces),
             ("Triangles", entry.triangles),
         ):
-            row = totals.row(align=True)
-            row.label(text=label)
-
-            value = row.row(align=True)
-            value.alignment = "RIGHT"
-            value.label(text=str(count))
+            draw_value_row(totals, label, count)
 
         item.separator()
 
@@ -545,36 +583,16 @@ def draw_mesh_results(layout, settings, context):
 
         for key, label, _ in MESH_FINDINGS:
             count = getattr(entry, key)
-
-            row = findings.row(align=True)
-            row.label(text=label)
-
-            value = row.row(align=True)
-            value.alignment = "RIGHT"
-            value.label(text=str(count))
+            row = draw_value_row(findings, label, count)
 
             if count:
-                target = entry.object_ref
-
-                row.separator(factor=0.8)
-
-                button_row = row.row(align=True)
-                button_row.enabled = (
-                    context.mode == "OBJECT"
-                    and target is not None
-                )
-
-                button = button_row.operator(
+                draw_finding_select_button(
+                    row,
+                    context,
+                    entry.object_ref,
                     "geprep.select_mesh_finding",
-                    text="",
-                    icon="RESTRICT_SELECT_OFF",
+                    key,
                 )
-                button.object_key = (
-                    str(target.as_pointer())
-                    if target is not None
-                    else ""
-                )
-                button.finding = key
 
 
 def draw_mesh_fix_results(layout, settings, context):
@@ -584,7 +602,7 @@ def draw_mesh_fix_results(layout, settings, context):
     if not results:
         return
 
-    box, expanded = draw_results_box(
+    box, expanded = draw_collapsible_box(
         layout,
         ui,
         "mesh_fix_results_expanded",
@@ -633,11 +651,10 @@ class GEPREP_PT_mesh(bpy.types.Panel):
         col.scale_y = INPUT_SCALE_Y
         col.prop(settings, "mesh_distance")
 
-        col = check_box.column()
-        col.scale_y = BUTTON_SCALE_Y
-        col.operator(
+        draw_action_button(
+            check_box,
             "geprep.check_mesh",
-            text="Check Mesh",
+            "Check Mesh",
             icon="VIEWZOOM",
         )
 
@@ -648,67 +665,29 @@ class GEPREP_PT_mesh(bpy.types.Panel):
 
         draw_mesh_results(layout, settings, context)
 
-        fixes_main = layout.box()
-        fixes_main.use_property_split = False
-        fixes_main.prop(
+        fixes_main, fixes_expanded = draw_collapsible_box(
+            layout,
             ui,
             "mesh_fixes_expanded",
-            text="Mesh Fixes",
-            icon="TRIA_DOWN" if ui.mesh_fixes_expanded else "TRIA_RIGHT",
-            emboss=False,
+            "Mesh Fixes",
         )
 
-        if ui.mesh_fixes_expanded:
-            box = fixes_main.box()
-            col = box.column()
-            col.scale_y = BUTTON_SCALE_Y
-            button = col.operator(
-                "geprep.mesh_fix",
-                text="Remove Loose Geometry",
-            )
-            button.action = "LOOSE"
+        if fixes_expanded:
+            for action, label, _ in MESH_FIX_ACTIONS:
+                box = fixes_main.box()
+                distance_prop = MESH_FIX_DISTANCE_PROPS.get(action)
 
-            box = fixes_main.box()
-            col = box.column()
-            col.scale_y = INPUT_SCALE_Y
-            col.prop(settings, "mesh_merge_distance")
-            col = box.column()
-            col.scale_y = BUTTON_SCALE_Y
-            button = col.operator(
-                "geprep.mesh_fix",
-                text="Merge by Distance",
-            )
-            button.action = "MERGE"
+                if distance_prop is not None:
+                    col = box.column()
+                    col.scale_y = INPUT_SCALE_Y
+                    col.prop(settings, distance_prop)
 
-            box = fixes_main.box()
-            col = box.column()
-            col.scale_y = INPUT_SCALE_Y
-            col.prop(settings, "mesh_dissolve_distance")
-            col = box.column()
-            col.scale_y = BUTTON_SCALE_Y
-            button = col.operator(
-                "geprep.mesh_fix",
-                text="Dissolve Degenerate Geometry",
-            )
-            button.action = "DEGENERATE"
-
-            box = fixes_main.box()
-            col = box.column()
-            col.scale_y = BUTTON_SCALE_Y
-            button = col.operator(
-                "geprep.mesh_fix",
-                text="Recalculate Normals Outside",
-            )
-            button.action = "NORMALS"
-
-            box = fixes_main.box()
-            col = box.column()
-            col.scale_y = BUTTON_SCALE_Y
-            button = col.operator(
-                "geprep.mesh_fix",
-                text="Triangulate",
-            )
-            button.action = "TRIANGULATE"
+                draw_action_button(
+                    box,
+                    "geprep.mesh_fix",
+                    label,
+                    action=action,
+                )
 
         draw_mesh_fix_results(layout, settings, context)
 
@@ -720,7 +699,7 @@ def draw_uv_results(layout, settings, context):
     if not results:
         return
 
-    box, expanded = draw_results_box(
+    box, expanded = draw_collapsible_box(
         layout,
         ui,
         "uv_results_expanded",
@@ -773,6 +752,7 @@ def draw_uv_results(layout, settings, context):
                 else "Unavailable",
             ),
             ("Islands", str(entry.islands)),
+            ("Tile Coverage", f"{entry.tile_coverage * 100:.1f}%"),
         ]
 
         if entry.density_available and entry.islands > 1:
@@ -785,12 +765,7 @@ def draw_uv_results(layout, settings, context):
             ))
 
         for label, value in values:
-            row = details.row(align=True)
-            row.label(text=label)
-
-            value_row = row.row(align=True)
-            value_row.alignment = "RIGHT"
-            value_row.label(text=value)
+            draw_value_row(details, label, value)
 
         item.separator()
         item.label(text="Findings (faces)")
@@ -799,36 +774,16 @@ def draw_uv_results(layout, settings, context):
 
         for key, label in UV_FINDINGS:
             count = getattr(entry, f"{key}_faces")
-
-            row = findings.row(align=True)
-            row.label(text=label)
-
-            value_row = row.row(align=True)
-            value_row.alignment = "RIGHT"
-            value_row.label(text=str(count))
+            row = draw_value_row(findings, label, count)
 
             if count:
-                target = entry.object_ref
-
-                row.separator(factor=0.8)
-
-                button_row = row.row(align=True)
-                button_row.enabled = (
-                    context.mode == "OBJECT"
-                    and target is not None
-                )
-
-                button = button_row.operator(
+                draw_finding_select_button(
+                    row,
+                    context,
+                    entry.object_ref,
                     "geprep.select_uv_finding",
-                    text="",
-                    icon="RESTRICT_SELECT_OFF",
+                    key,
                 )
-                button.object_key = (
-                    str(target.as_pointer())
-                    if target is not None
-                    else ""
-                )
-                button.finding = key
 
 
 def draw_uv_density_results(layout, settings, context):
@@ -838,7 +793,7 @@ def draw_uv_density_results(layout, settings, context):
     if not results:
         return
 
-    box, expanded = draw_results_box(
+    box, expanded = draw_collapsible_box(
         layout,
         ui,
         "uv_density_results_expanded",
@@ -865,6 +820,73 @@ def draw_uv_density_results(layout, settings, context):
         draw_multiline_message(item, context, entry.message)
 
 
+def draw_uv_orientation(layout, settings, context):
+    ui = context.window_manager.geprep_ui
+
+    box, expanded = draw_collapsible_box(
+        layout,
+        ui,
+        "uv_orientation_expanded",
+        "UV Orientation",
+    )
+
+    if not expanded:
+        return
+
+    in_edit_mode = context.mode == "EDIT_MESH"
+
+    if in_edit_mode:
+        box.label(text="Select faces. Whole islands are rotated")
+
+    else:
+        box.label(text="Enter Edit Mode and select faces", icon="INFO")
+
+    col = box.column()
+    col.scale_y = INPUT_SCALE_Y
+    col.prop(settings, "uv_orientation_reference", text="Up Axis")
+    col.prop(settings, "uv_orientation_tolerance")
+
+    info_col = box.column(align=True)
+    info_col.scale_y = 0.8
+    info_col.label(text="Arrows point the cyan +U arrow")
+    if settings.uv_orientation_reference == "AUTO":
+        info_col.label(text="Up: world Z (walls), world Y (floors)")
+
+    labels = {key: label for key, label, _ in ORIENTATION_ACTIONS}
+    grid = box.column(align=True)
+    grid.scale_y = BUTTON_SCALE_Y
+    grid.enabled = in_edit_mode
+
+    for actions in (
+        (None, "UP", None),
+        ("LEFT", "ALIGN", "RIGHT"),
+        (None, "DOWN", None),
+    ):
+        row = grid.row(align=True)
+
+        for action in actions:
+            if action is None:
+                row.label(text="")
+                continue
+
+            button = row.operator(
+                "geprep.orient_uvs",
+                text=labels[action],
+            )
+            button.action = action
+
+    box.label(text="● points +U right and +V up")
+
+    mirror_row = box.column()
+    mirror_row.enabled = in_edit_mode
+    draw_action_button(
+        mirror_row,
+        "geprep.orient_uvs",
+        MIRROR_ACTION[1],
+        action=MIRROR_ACTION[0],
+    )
+
+
 class GEPREP_PT_uv(bpy.types.Panel):
     bl_idname = "GEPREP_PT_uv"
     bl_label = "UV"
@@ -877,72 +899,251 @@ class GEPREP_PT_uv(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         settings = context.scene.geprep
+        ui = context.window_manager.geprep_ui
         active = context.view_layer.objects.active
+        density_box, density_expanded = draw_collapsible_box(
+            layout,
+            ui,
+            "uv_density_expanded",
+            "Texel Density",
+        )
 
-        density_box = layout.box()
-        density_box.label(text="Texel Density")
+        if density_expanded:
+            col = density_box.column()
+            col.scale_y = INPUT_SCALE_Y
 
-        col = density_box.column()
-        col.scale_y = INPUT_SCALE_Y
+            if active is not None and active.type == "MESH":
+                col.prop_search(
+                    settings,
+                    "uv_map_name",
+                    active.data,
+                    "uv_layers",
+                    text="UV Map",
+                )
+            else:
+                col.prop(settings, "uv_map_name")
 
-        if active is not None and active.type == "MESH":
-            col.prop_search(
+            col.prop(
                 settings,
-                "uv_map_name",
-                active.data,
-                "uv_layers",
-                text="UV Map",
+                "uv_texture_preset",
+                text="Texture",
             )
-        else:
-            col.prop(settings, "uv_map_name")
 
-        col.prop(
-            settings,
-            "uv_texture_preset",
-            text="Texture",
-        )
+            if settings.uv_texture_preset == "CUSTOM":
+                row = col.row(align=True)
+                row.prop(settings, "uv_texture_width")
+                row.prop(settings, "uv_texture_height")
 
-        if settings.uv_texture_preset == "CUSTOM":
+            col.prop(settings, "uv_density_preset")
+
+            if settings.uv_density_preset == "CUSTOM":
+                col.prop(settings, "uv_target_density")
+
+            col.prop(settings, "uv_tolerance")
+
+            col = density_box.column()
+            col.scale_y = BUTTON_SCALE_Y
             row = col.row(align=True)
-            row.prop(settings, "uv_texture_width")
-            row.prop(settings, "uv_texture_height")
-
-        col.prop(settings, "uv_density_preset")
-
-        if settings.uv_density_preset == "CUSTOM":
-            col.prop(settings, "uv_target_density")
-
-        col.prop(settings, "uv_tolerance")
-
-        col = density_box.column()
-        col.scale_y = BUTTON_SCALE_Y
-        row = col.row(align=True)
-        row.operator(
-            "geprep.check_uvs",
-            text="Check UVs",
-            icon="VIEWZOOM",
-        )
-        row.operator(
-            "geprep.set_uv_density",
-            text="Set Density",
-        )
+            row.operator(
+                "geprep.check_uvs",
+                text="Check UVs",
+                icon="VIEWZOOM",
+            )
+            row.operator(
+                "geprep.set_uv_density",
+                text="Set Density",
+            )
 
         draw_uv_results(layout, settings, context)
         draw_uv_density_results(layout, settings, context)
+
+        draw_uv_orientation(layout, settings, context)
 
         checker_box = layout.box()
         checker_box.label(text="Checker Preview")
         col = checker_box.column()
         col.scale_y = BUTTON_SCALE_Y
         row = col.row(align=True)
-        row.operator(
-            "geprep.checker_preview",
-            text="Checker",
-        )
-        row.operator(
+
+        for style, label, _ in CHECKER_STYLES:
+            button = row.operator("geprep.checker_preview", text=label)
+            button.checker_style = style
+
+        col.operator(
             "geprep.restore_checker",
             text="Remove Checker",
         )
+        checker_box.label(text="Direction Checker: cyan +U, orange +V")
+
+
+def draw_nested_result_header(layout, context, section, index, title, status):
+    """Draw a lighter foldout header for a result inside a result card."""
+    row = layout.row(align=True)
+
+    name_row = row.row(align=True)
+    name_row.alignment = "LEFT"
+    expanded = draw_result_details_toggle(
+        name_row,
+        context,
+        section,
+        index,
+        title,
+    )
+
+    status_row = row.row(align=True)
+    status_row.alignment = "RIGHT"
+    status_row.label(
+        text=RESULT_STATUS_LABELS.get(status, status.capitalize()),
+        icon=RESULT_STATUS_ICONS.get(status, "NONE"),
+    )
+
+    return expanded
+
+
+def draw_texture_result(layout, context, texture, index):
+    box = layout.box()
+    box.alert = texture.status == "FAILED"
+
+    if not draw_nested_result_header(
+        box,
+        context,
+        "material_texture",
+        index,
+        texture.name,
+        texture.status,
+    ):
+        return
+
+    draw_multiline_message(box, context, texture.message, 96)
+
+    details = box.column(align=True)
+
+    if texture.width and texture.height:
+        draw_value_row(
+            details,
+            "Size",
+            f"{texture.width} × {texture.height}",
+        )
+
+    if texture.color_space:
+        draw_value_row(details, "Color Space", texture.color_space)
+
+    if texture.storage:
+        draw_value_row(details, "Storage", texture.storage)
+
+    draw_multiline_message(box, context, f"Node: {texture.node_path}", 96)
+
+    if texture.filepath:
+        draw_multiline_message(box, context, f"Path: {texture.filepath}", 96)
+
+
+def draw_material_slot_result(layout, context, material, index):
+    box = layout.box()
+    box.alert = material.status == "FAILED"
+
+    if not draw_nested_result_header(
+        box,
+        context,
+        "material_slot",
+        index,
+        f"{material.slot}: {material.name}",
+        material.status,
+    ):
+        return
+
+    draw_value_row(box, "Slot Link", material.link.title())
+    draw_multiline_message(box, context, material.message, 80)
+
+    for texture_index, texture in enumerate(material.textures):
+        draw_texture_result(
+            box,
+            context,
+            texture,
+            f"{index}.{texture_index}",
+        )
+
+
+def draw_material_results(layout, settings, context):
+    ui = context.window_manager.geprep_ui
+    results = settings.material_results
+
+    if not results:
+        return
+
+    box, expanded = draw_collapsible_box(
+        layout,
+        ui,
+        "material_results_expanded",
+        "Last Material Check",
+        len(results),
+    )
+    if not expanded:
+        return
+
+    box.label(text="Run the check again after changes")
+
+    for index, entry in enumerate(results):
+        item, item_expanded = draw_result_item_header(
+            box,
+            context,
+            "material",
+            index,
+            entry.object_name,
+            entry.status,
+            entry.object_ref,
+        )
+
+        if not item_expanded:
+            continue
+
+        draw_multiline_message(item, context, entry.message)
+
+        details = item.column(align=True)
+        draw_value_row(details, "Materials", entry.material_count)
+        draw_value_row(details, "Images", entry.image_count)
+        draw_value_row(details, "Empty Slots", entry.empty_slots)
+
+        for material_index, material in enumerate(entry.materials):
+            draw_material_slot_result(
+                item,
+                context,
+                material,
+                f"{index}.{material_index}",
+            )
+
+
+def draw_material_slot_results(layout, settings, context):
+    ui = context.window_manager.geprep_ui
+    results = settings.material_slot_results
+
+    if not results:
+        return
+
+    box, expanded = draw_collapsible_box(
+        layout,
+        ui,
+        "material_slot_results_expanded",
+        "Last Remove Empty Slots Results",
+        len(results),
+    )
+    if not expanded:
+        return
+
+    for index, entry in enumerate(results):
+        item, item_expanded = draw_result_item_header(
+            box,
+            context,
+            "material_slots",
+            index,
+            entry.object_name,
+            entry.status,
+            entry.object_ref,
+        )
+
+        if not item_expanded:
+            continue
+
+        draw_multiline_message(item, context, entry.message)
 
 
 class GEPREP_PT_materials(bpy.types.Panel):
@@ -955,7 +1156,41 @@ class GEPREP_PT_materials(bpy.types.Panel):
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
-        pass
+        layout = self.layout
+        settings = context.scene.geprep
+
+        check_box = layout.box()
+
+        col = check_box.column()
+        col.scale_y = INPUT_SCALE_Y
+        col.prop(settings, "material_max_texture_size")
+
+
+        draw_action_button(
+            check_box,
+            "geprep.check_materials",
+            "Check Materials",
+            icon="VIEWZOOM",
+        )
+
+        draw_material_results(layout, settings, context)
+
+        slots_box = layout.box()
+
+        draw_action_button(
+            slots_box,
+            "geprep.remove_empty_material_slots",
+            "Remove Empty Slots",
+        )
+
+        draw_material_slot_results(layout, settings, context)
+
+
+ORIGIN_GRID = (
+    (("TL", "↖"), ("TC", "↑"), ("TR", "↗")),
+    (("CL", "←"), ("C", "●"), ("CR", "→")),
+    (("BL", "↙"), ("BC", "↓"), ("BR", "↘")),
+)
 
 
 class GEPREP_PT_origin(bpy.types.Panel):
@@ -968,7 +1203,79 @@ class GEPREP_PT_origin(bpy.types.Panel):
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
-        pass
+        layout = self.layout
+        settings = context.scene.geprep
+
+        box = layout.box()
+
+        row = box.row(align=True)
+        row.scale_y = INPUT_SCALE_Y
+        row.prop(settings, "origin_depth", expand=True)
+
+        grid = box.column(align=True)
+        grid.scale_y = BUTTON_SCALE_Y
+
+        for buttons in ORIGIN_GRID:
+            row = grid.row(align=True)
+
+            for position, arrow in buttons:
+                button = row.operator("geprep.set_origin", text=arrow)
+                button.position = position
+                button.depth = settings.origin_depth
+
+        draw_action_button(
+            box,
+            "geprep.set_origin",
+            "Origin to 3D Cursor",
+            icon="PIVOT_CURSOR",
+            position="CURSOR",
+        )
+
+
+def draw_export_results(layout, settings, context):
+    ui = context.window_manager.geprep_ui
+    results = settings.export_results
+
+    if not results:
+        return
+
+    box, expanded = draw_collapsible_box(
+        layout,
+        ui,
+        "export_results_expanded",
+        "Last Export",
+        len(results),
+    )
+    if not expanded:
+        return
+
+    counts = {
+        status: sum(entry.status == status for entry in results)
+        for status in ("EXPORTED", "SKIPPED", "FAILED")
+    }
+    box.label(
+        text=(
+            f"{counts['EXPORTED']} exported, {counts['SKIPPED']} skipped, "
+            f"{counts['FAILED']} failed"
+        )
+    )
+
+    for index, entry in enumerate(results):
+        item = box.box()
+        item.alert = entry.status == "FAILED"
+
+        if not draw_nested_result_header(
+            item,
+            context,
+            "export",
+            index,
+            entry.filename,
+            entry.status,
+        ):
+            continue
+
+        draw_multiline_message(item, context, entry.message, 80)
+        draw_multiline_message(item, context, entry.filepath, 80)
 
 
 class GEPREP_PT_export(bpy.types.Panel):
@@ -981,4 +1288,28 @@ class GEPREP_PT_export(bpy.types.Panel):
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
-        pass
+        layout = self.layout
+        settings = context.scene.geprep
+
+        box = layout.box()
+        col = box.column()
+        col.scale_y = INPUT_SCALE_Y
+        col.prop(settings, "export_folder")
+        col.prop(settings, "export_mode")
+
+        if settings.export_mode != "SEPARATE":
+            col.prop(settings, "export_name")
+
+        box.prop(settings, "export_materials")
+        box.prop(settings, "export_tangents")
+        box.prop(settings, "export_overwrite")
+
+        draw_action_button(
+            box,
+            "geprep.export_glb",
+            "Export GLB",
+            icon="EXPORT",
+        )
+        box.label(text="Y up, scene unit scale applied", icon="INFO")
+
+        draw_export_results(layout, settings, context)

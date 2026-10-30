@@ -2,7 +2,10 @@ import traceback
 
 import bpy
 
+from ..helpers.objects import has_selected_mesh, selected_meshes
+
 from ..operations.checker import (
+    CHECKER_STYLES,
     CheckerRecoveryError,
     apply_checker_preview,
     has_checker_preview,
@@ -17,27 +20,31 @@ class GEPREP_OT_checker_preview(bpy.types.Operator):
     bl_label = "Checker"
     bl_options = {"REGISTER", "UNDO"}
 
+    checker_style: bpy.props.EnumProperty(
+        items=CHECKER_STYLES,
+        default="PLAIN",
+        options={"HIDDEN", "SKIP_SAVE"},
+    )
+
+    @classmethod
+    def description(cls, context, properties):
+        return next(
+            tooltip
+            for key, _, tooltip in CHECKER_STYLES
+            if key == properties.checker_style
+        )
+
     @classmethod
     def poll(cls, context):
         return (
             context.mode == "OBJECT"
             and context.scene.is_editable
-            and any(
-                obj.type == "MESH"
-                for obj in context.selected_objects
-            )
+            and has_selected_mesh(context)
         )
 
     def execute(self, context):
         settings = context.scene.geprep
-        objects = sorted(
-            (
-                obj
-                for obj in context.selected_objects
-                if obj.type == "MESH"
-            ),
-            key=lambda obj: (obj.name.casefold(), obj.name),
-        )
+        objects = selected_meshes(context)
 
         shown = skipped = failed = 0
 
@@ -49,6 +56,7 @@ class GEPREP_OT_checker_preview(bpy.types.Operator):
                     uv_name=settings.uv_map_name,
                     width=settings.uv_texture_width,
                     height=settings.uv_texture_height,
+                    style=self.checker_style,
                 )
 
             except CheckerRecoveryError as error:

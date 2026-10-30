@@ -1,4 +1,10 @@
+import math
+
 import bpy
+
+from .operations.export import EXPORT_MODES, default_glb_name
+from .operations.origin import ORIGIN_DEPTHS
+from .operations.uv_orientation import ORIENTATION_REFERENCES
 
 
 def update_uv_texture_preset(self, context):
@@ -8,6 +14,11 @@ def update_uv_texture_preset(self, context):
     size = int(self.uv_texture_preset)
     self.uv_texture_width = size
     self.uv_texture_height = size
+
+
+def update_export_mode(self, context):
+    if self.export_mode != "SEPARATE" and not self.export_name.strip():
+        self.export_name = default_glb_name()
 
 
 def update_uv_density_preset(self, context):
@@ -171,6 +182,31 @@ class GEPREP_PG_ui(bpy.types.PropertyGroup):
         options={"SKIP_SAVE"},
     )
 
+    uv_density_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    uv_orientation_expanded: bpy.props.BoolProperty(
+        default=False,
+        options={"SKIP_SAVE"},
+    )
+
+    material_results_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    material_slot_results_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
+    export_results_expanded: bpy.props.BoolProperty(
+        default=True,
+        options={"SKIP_SAVE"},
+    )
+
     result_foldouts: bpy.props.CollectionProperty(
         type=GEPREP_PG_result_foldout,
         options={"SKIP_SAVE"},
@@ -251,8 +287,11 @@ class GEPREP_PG_uv_result(bpy.types.PropertyGroup):
     mismatched_islands: bpy.props.IntProperty(min=0)
     unmeasurable_islands: bpy.props.IntProperty(min=0)
 
+    tile_coverage: bpy.props.FloatProperty(min=0.0, max=1.0)
+
     density_faces: bpy.props.IntProperty(min=0)
     outside_tile_faces: bpy.props.IntProperty(min=0)
+    overlap_faces: bpy.props.IntProperty(min=0)
     collapsed_uv_faces: bpy.props.IntProperty(min=0)
     degenerate_mesh_faces: bpy.props.IntProperty(min=0)
     mirrored_faces: bpy.props.IntProperty(min=0)
@@ -273,6 +312,88 @@ class GEPREP_PG_uv_density_result(bpy.types.PropertyGroup):
         default="SKIPPED",
     )
 
+    message: bpy.props.StringProperty()
+
+
+class GEPREP_PG_texture_check(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty()
+    status: bpy.props.EnumProperty(
+        items=(
+            ("PASSED", "No Findings", ""),
+            ("INSPECT", "Inspect", ""),
+            ("FAILED", "Failed", ""),
+        ),
+        default="PASSED",
+    )
+    message: bpy.props.StringProperty()
+    node_path: bpy.props.StringProperty()
+    width: bpy.props.IntProperty(min=0)
+    height: bpy.props.IntProperty(min=0)
+    color_space: bpy.props.StringProperty()
+    storage: bpy.props.StringProperty()
+    filepath: bpy.props.StringProperty()
+
+
+class GEPREP_PG_material_check(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty()
+    status: bpy.props.EnumProperty(
+        items=(
+            ("PASSED", "No Findings", ""),
+            ("INSPECT", "Inspect", ""),
+            ("FAILED", "Failed", ""),
+        ),
+        default="PASSED",
+    )
+    message: bpy.props.StringProperty()
+    slot: bpy.props.IntProperty(min=0)
+    link: bpy.props.StringProperty()
+    textures: bpy.props.CollectionProperty(type=GEPREP_PG_texture_check)
+
+
+class GEPREP_PG_material_result(bpy.types.PropertyGroup):
+    object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
+    object_name: bpy.props.StringProperty()
+    status: bpy.props.EnumProperty(
+        items=(
+            ("PASSED", "No Findings", ""),
+            ("INSPECT", "Inspect", ""),
+            ("FAILED", "Failed", ""),
+        ),
+        default="PASSED",
+    )
+    message: bpy.props.StringProperty()
+    material_count: bpy.props.IntProperty(min=0)
+    image_count: bpy.props.IntProperty(min=0)
+    empty_slots: bpy.props.IntProperty(min=0)
+    materials: bpy.props.CollectionProperty(type=GEPREP_PG_material_check)
+
+
+class GEPREP_PG_material_slot_result(bpy.types.PropertyGroup):
+    object_ref: bpy.props.PointerProperty(type=bpy.types.Object)
+    object_name: bpy.props.StringProperty()
+    status: bpy.props.EnumProperty(
+        items=(
+            ("CHANGED", "Changed", ""),
+            ("SKIPPED", "Skipped", ""),
+            ("FAILED", "Failed", ""),
+            ("INCOMPLETE", "Recovery Failed", ""),
+        ),
+        default="SKIPPED",
+    )
+    message: bpy.props.StringProperty()
+
+
+class GEPREP_PG_export_result(bpy.types.PropertyGroup):
+    filename: bpy.props.StringProperty()
+    filepath: bpy.props.StringProperty()
+    status: bpy.props.EnumProperty(
+        items=(
+            ("EXPORTED", "Exported", ""),
+            ("SKIPPED", "Skipped", ""),
+            ("FAILED", "Failed", ""),
+        ),
+        default="FAILED",
+    )
     message: bpy.props.StringProperty()
 
 
@@ -443,6 +564,29 @@ class GEPREP_PG_settings(bpy.types.PropertyGroup):
         description="Leave empty to use each object's active UV map",
     )
 
+    uv_orientation_reference: bpy.props.EnumProperty(
+        name="Up Axis",
+        description="Direction the Orient UVs arrows treat as up",
+        items=ORIENTATION_REFERENCES,
+        default="AUTO",
+    )
+
+    uv_orientation_tolerance: bpy.props.FloatProperty(
+        name="Flatness Tolerance",
+        description=(
+            "How much an island may bend and still be rotated by its "
+            "average direction. 0 accepts flat islands only"
+        ),
+        subtype="ANGLE",
+        unit="ROTATION",
+        default=0.0,
+        min=0.0,
+        max=math.radians(20.0),
+        soft_max=math.radians(10.0),
+        precision=1,
+        step=10,
+    )
+
     uv_texture_preset: bpy.props.EnumProperty(
         name="Texture Size",
         description="Choose a square texture size or enter custom dimensions",
@@ -521,6 +665,87 @@ class GEPREP_PG_settings(bpy.types.PropertyGroup):
 
     uv_density_results: bpy.props.CollectionProperty(
         type=GEPREP_PG_uv_density_result,
+        options={"SKIP_SAVE"},
+    )
+
+    # Materials
+    material_max_texture_size: bpy.props.IntProperty(
+        name="Max Texture Size (px)",
+        description=(
+            "Textures with a longer side than this are reported "
+            "when materials are checked"
+        ),
+        default=4096,
+        min=64,
+        max=16384,
+    )
+
+    material_results: bpy.props.CollectionProperty(
+        type=GEPREP_PG_material_result,
+        options={"SKIP_SAVE"},
+    )
+
+    material_slot_results: bpy.props.CollectionProperty(
+        type=GEPREP_PG_material_slot_result,
+        options={"SKIP_SAVE"},
+    )
+
+    # Origin
+    origin_depth: bpy.props.EnumProperty(
+        name="Depth",
+        description=(
+            "Where the origin sits along the mesh's local Y axis. "
+            "In the front view the front is the lowest Y"
+        ),
+        items=ORIGIN_DEPTHS,
+        default="CENTER",
+    )
+
+    # Export
+    export_folder: bpy.props.StringProperty(
+        name="Folder",
+        description=(
+            "Folder for the GLB files. Start with // to use a path "
+            "relative to the saved project"
+        ),
+        subtype="DIR_PATH",
+    )
+
+    export_mode: bpy.props.EnumProperty(
+        name="Mode",
+        items=EXPORT_MODES,
+        default="SEPARATE",
+        update=update_export_mode,
+    )
+
+    export_name: bpy.props.StringProperty(
+        name="File Name",
+        description="Name of the GLB file. Leave empty to use the project name",
+    )
+
+    export_materials: bpy.props.BoolProperty(
+        name="Include Materials & Textures",
+        description="Write materials and their images into the GLB",
+        default=True,
+    )
+
+    export_tangents: bpy.props.BoolProperty(
+        name="Include Tangents",
+        description=(
+            "Write tangents into the GLB. Most engines calculate their "
+            "own, so this only makes the files bigger"
+        ),
+        default=False,
+    )
+
+    export_overwrite: bpy.props.BoolProperty(
+        name="Overwrite Existing Files",
+        description="Replace files that already exist in the folder",
+        default=False,
+    )
+
+    export_results: bpy.props.CollectionProperty(
+        type=GEPREP_PG_export_result,
         options={"SKIP_SAVE"},
     )
 

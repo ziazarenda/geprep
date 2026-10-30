@@ -2,6 +2,12 @@ import traceback
 
 import bpy
 
+from ..helpers.objects import (
+    find_object_by_key,
+    has_selected_mesh,
+    selected_meshes,
+)
+
 from ..operations.mesh import (
     MeshFixRecoveryError,
     select_mesh_elements,
@@ -13,8 +19,98 @@ from ..operations.uv import (
 )
 
 
+def run_uv_check(context, objects):
+    """Inspect the base-mesh UVs of `objects` and store the results.
+
+    Returns (passed, inspect, failed) counts.
+    """
+    settings = context.scene.geprep
+
+    context.view_layer.update()
+
+    width = settings.uv_texture_width
+    height = settings.uv_texture_height
+    target = settings.uv_target_density
+    tolerance = settings.uv_tolerance
+    unit_scale = context.scene.unit_settings.scale_length
+
+    results = settings.uv_results
+    results.clear()
+
+    settings.uv_checked_width = width
+    settings.uv_checked_height = height
+    settings.uv_checked_target = target
+    settings.uv_checked_tolerance = tolerance
+    settings.uv_checked_units = unit_scale
+
+    context.window_manager.geprep_ui.uv_results_expanded = True
+
+    for obj in objects:
+        entry = results.add()
+        entry.object_ref = obj
+        entry.object_name = obj.name
+
+        try:
+            result = inspect_uv_mesh(
+                obj.data,
+                obj.matrix_world,
+                unit_scale,
+                uv_name=settings.uv_map_name,
+                width=width,
+                height=height,
+                target=target,
+                tolerance=tolerance,
+            )
+
+            entry.uv_name = result["uv_name"]
+            entry.density_available = result["density"] is not None
+
+            if entry.density_available:
+                entry.density = result["density"]
+                entry.minimum_density = result["minimum_density"]
+                entry.maximum_density = result["maximum_density"]
+
+            entry.tile_coverage = result["coverage"]
+            entry.islands = len(result["islands"])
+            entry.mismatched_islands = len(
+                result["mismatched_islands"]
+            )
+            entry.unmeasurable_islands = len(
+                result["unmeasurable_islands"]
+            )
+
+            for key, faces in result["findings"].items():
+                setattr(entry, f"{key}_faces", len(faces))
+
+            entry.status = (
+                "INSPECT"
+                if any(result["findings"].values())
+                else "PASSED"
+            )
+
+        except Exception as error:
+            traceback.print_exc()
+            entry.status = "FAILED"
+            entry.message = str(error)
+
+    passed = sum(
+        entry.status == "PASSED"
+        for entry in results
+    )
+    inspect = sum(
+        entry.status == "INSPECT"
+        for entry in results
+    )
+    failed = sum(
+        entry.status == "FAILED"
+        for entry in results
+    )
+
+    return passed, inspect, failed
+
+
 class GEPREP_OT_check_uvs(bpy.types.Operator):
-    """Inspect base-mesh UVs. Shader tiling is not measured. Findings may be intentional."""
+    """Inspect base-mesh UVs. Shader tiling is not measured. Overlap is estimated on a 512 × 512 grid. Findings may be intentional."""
 
     bl_idname = "geprep.check_uvs"
     bl_label = "Check UVs"
@@ -25,100 +121,13 @@ class GEPREP_OT_check_uvs(bpy.types.Operator):
         return (
             context.mode == "OBJECT"
             and context.scene.is_editable
-            and any(
-                obj.type == "MESH"
-                for obj in context.selected_objects
-            )
+            and has_selected_mesh(context)
         )
 
     def execute(self, context):
-        settings = context.scene.geprep
-        objects = sorted(
-            (
-                obj
-                for obj in context.selected_objects
-                if obj.type == "MESH"
-            ),
-            key=lambda obj: (obj.name.casefold(), obj.name),
-        )
-
-        context.view_layer.update()
-
-        width = settings.uv_texture_width
-        height = settings.uv_texture_height
-        target = settings.uv_target_density
-        tolerance = settings.uv_tolerance
-        unit_scale = context.scene.unit_settings.scale_length
-
-        results = settings.uv_results
-        results.clear()
-
-        settings.uv_checked_width = width
-        settings.uv_checked_height = height
-        settings.uv_checked_target = target
-        settings.uv_checked_tolerance = tolerance
-        settings.uv_checked_units = unit_scale
-
-        context.window_manager.geprep_ui.uv_results_expanded = True
-
-        for obj in objects:
-            entry = results.add()
-            entry.object_ref = obj
-            entry.object_name = obj.name
-
-            try:
-                result = inspect_uv_mesh(
-                    obj.data,
-                    obj.matrix_world,
-                    unit_scale,
-                    uv_name=settings.uv_map_name,
-                    width=width,
-                    height=height,
-                    target=target,
-                    tolerance=tolerance,
-                )
-
-                entry.uv_name = result["uv_name"]
-                entry.density_available = result["density"] is not None
-
-                if entry.density_available:
-                    entry.density = result["density"]
-                    entry.minimum_density = result["minimum_density"]
-                    entry.maximum_density = result["maximum_density"]
-
-                entry.islands = len(result["islands"])
-                entry.mismatched_islands = len(
-                    result["mismatched_islands"]
-                )
-                entry.unmeasurable_islands = len(
-                    result["unmeasurable_islands"]
-                )
-
-                for key, faces in result["findings"].items():
-                    setattr(entry, f"{key}_faces", len(faces))
-
-                entry.status = (
-                    "INSPECT"
-                    if any(result["findings"].values())
-                    else "PASSED"
-                )
-
-            except Exception as error:
-                traceback.print_exc()
-                entry.status = "FAILED"
-                entry.message = str(error)
-
-        passed = sum(
-            entry.status == "PASSED"
-            for entry in results
-        )
-        inspect = sum(
-            entry.status == "INSPECT"
-            for entry in results
-        )
-        failed = sum(
-            entry.status == "FAILED"
-            for entry in results
+        passed, inspect, failed = run_uv_check(
+            context,
+            selected_meshes(context),
         )
 
         self.report(
@@ -158,13 +167,9 @@ class GEPREP_OT_select_uv_finding(bpy.types.Operator):
         )
 
     def execute(self, context):
-        obj = next(
-            (
-                obj
-                for obj in context.view_layer.objects
-                if str(obj.as_pointer()) == self.object_key
-            ),
-            None,
+        obj = find_object_by_key(
+            context.view_layer.objects,
+            self.object_key,
         )
 
         if obj is None or obj.type != "MESH":
@@ -314,22 +319,12 @@ class GEPREP_OT_set_uv_density(bpy.types.Operator):
         return (
             context.mode == "OBJECT"
             and context.scene.is_editable
-            and any(
-                obj.type == "MESH"
-                for obj in context.selected_objects
-            )
+            and has_selected_mesh(context)
         )
 
     def execute(self, context):
         settings = context.scene.geprep
-        objects = sorted(
-            (
-                obj
-                for obj in context.selected_objects
-                if obj.type == "MESH"
-            ),
-            key=lambda obj: (obj.name.casefold(), obj.name),
-        )
+        objects = selected_meshes(context)
 
         results = settings.uv_density_results
         results.clear()
@@ -404,10 +399,7 @@ class GEPREP_OT_set_uv_density(bpy.types.Operator):
 
         if changed_count and not incomplete:
             try:
-                result = bpy.ops.geprep.check_uvs()
-
-                if "FINISHED" not in result:
-                    raise RuntimeError("Blender did not finish the UV check")
+                run_uv_check(context, selected_meshes(context))
 
             except Exception as error:
                 traceback.print_exc()

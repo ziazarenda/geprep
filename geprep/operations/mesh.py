@@ -4,6 +4,8 @@ import math
 import bmesh
 from mathutils.kdtree import KDTree
 
+from ..helpers.objects import has_animation, restore_material_links
+
 
 MESH_FINDINGS = (
     ("ngons", "N-gons", "FACE"),
@@ -238,13 +240,7 @@ def validate_mesh_fix_data(mesh):
             "This mesh has shape keys. Use a mesh without shape keys"
         )
 
-    animation = mesh.animation_data
-
-    if animation is not None and (
-        animation.action is not None
-        or animation.drivers
-        or animation.nla_tracks
-    ):
+    if has_animation(mesh):
         raise ValueError(
             "This mesh has animation. Use an unanimated mesh copy"
         )
@@ -420,22 +416,6 @@ class MeshFixRecoveryError(RuntimeError):
     """A mesh fix failed and recovery was incomplete."""
 
 
-def restore_mesh_material_links(obj, slots, active_index):
-    """Restore material links after replacing mesh data."""
-    if len(obj.material_slots) != len(slots):
-        raise RuntimeError(
-            "Material slot count does not match the original"
-        )
-
-    for slot, (link, material) in zip(obj.material_slots, slots):
-        slot.link = link
-
-        if link == "OBJECT":
-            slot.material = material
-
-    obj.active_material_index = active_index
-
-
 def apply_mesh_fix(
     context,
     obj,
@@ -500,7 +480,7 @@ def apply_mesh_fix(
             raise RuntimeError("Blender did not assign the fixed mesh")
 
         stage = "restore material links"
-        restore_mesh_material_links(
+        restore_material_links(
             obj,
             original_slots,
             original_material_index,
@@ -520,7 +500,7 @@ def apply_mesh_fix(
             try:
                 obj.data = original_mesh
 
-                restore_mesh_material_links(
+                restore_material_links(
                     obj,
                     original_slots,
                     original_material_index,

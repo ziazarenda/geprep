@@ -2,13 +2,17 @@ import bpy
 
 import math
 
+import numpy as np
+
 from functools import partial
 from .mesh import apply_mesh_fix
+from .uv_overlap import measure_tile_coverage
 
 
 UV_FINDINGS = (
     ("density", "Outside Density Target"),
     ("outside_tile", "Outside 0–1 Tile"),
+    ("overlap", "Overlapping UV Faces"),
     ("collapsed_uv", "Collapsed UV Faces"),
     ("degenerate_mesh", "Degenerate Mesh Faces"),
     ("mirrored", "Mirrored UV Faces"),
@@ -332,6 +336,8 @@ def inspect_uv_mesh(
     tile_epsilon = 0.000001
 
     for polygon in mesh.polygons:
+        indices = polygon.loop_indices
+
         if any(
             u < -tile_epsilon
             or v < -tile_epsilon
@@ -339,10 +345,25 @@ def inspect_uv_mesh(
             or v > 1.0 + tile_epsilon
             for u, v in (
                 coordinates[index]
-                for index in polygon.loop_indices
+                for index in indices
             )
         ):
             outside_tile_faces.append(polygon.index)
+
+    # Use Blender's own tessellation (what rendering and baking sample),
+    # so concave faces are not filled in by a simple fan.
+    mesh.calc_loop_triangles()
+    triangle_count = len(mesh.loop_triangles)
+    triangles = np.empty(triangle_count * 3, dtype=np.int64)
+    triangle_polygons = np.empty(triangle_count, dtype=np.int64)
+    mesh.loop_triangles.foreach_get("loops", triangles)
+    mesh.loop_triangles.foreach_get("polygon_index", triangle_polygons)
+    triangles = triangles.reshape(-1, 3)
+    coverage, overlapping_faces = measure_tile_coverage(
+        np.array(coordinates, dtype=float).reshape(-1, 2),
+        triangles,
+        triangle_polygons,
+    )
 
     densities = [
         island["density"]
@@ -355,9 +376,11 @@ def inspect_uv_mesh(
         "maximum_density": max(densities) if densities else None,
         "mismatched_islands": mismatched,
         "unmeasurable_islands": unmeasurable,
+        "coverage": coverage,
         "findings": {
             "density": sorted(density_faces),
             "outside_tile": outside_tile_faces,
+            "overlap": overlapping_faces,
             "collapsed_uv": result["collapsed_uv_faces"],
             "degenerate_mesh": result["degenerate_mesh_faces"],
             "mirrored": result["mirrored_faces"],

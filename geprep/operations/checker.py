@@ -1,10 +1,75 @@
 import bpy
 
+from .direction_checker_pixels import (
+    TILE_CELLS,
+    TILE_PIXELS,
+    build_direction_checker_pixels,
+)
 from .uv import read_uv_map
 
+# (style, button label, tooltip)
+CHECKER_STYLES = (
+    (
+        "PLAIN",
+        "Checker",
+        "Show a 64-pixel UV checker on the selected objects",
+    ),
+    (
+        "DIRECTION",
+        "Direction Checker",
+        "Show a UV checker with a cyan +U arrow and an orange +V arrow "
+        "in every square. Shows rotation and mirroring",
+    ),
+)
 
-def create_checker_material(uv_name, width, height):
+# One checker square is 64 texture pixels wide.
+CHECKER_SQUARE_PIXELS = 64
+
+
+def remove_checker_material(material):
+    """Remove a checker material and any image only it was using."""
+    images = set()
+
+    if material.node_tree is not None:
+        images = {
+            node.image
+            for node in material.node_tree.nodes
+            if node.type == "TEX_IMAGE" and node.image is not None
+        }
+
+    bpy.data.materials.remove(material)
+
+    for image in images:
+        if image.users == 0:
+            bpy.data.images.remove(image)
+
+
+def create_direction_image():
+    """Create the packed tile used by the Direction Checker."""
+    image = bpy.data.images.new(
+        "GEPrep Direction Checker",
+        TILE_PIXELS,
+        TILE_PIXELS,
+        alpha=False,
+    )
+
+    try:
+        pixels = build_direction_checker_pixels()
+        image.pixels.foreach_set(pixels.ravel())
+        image.pack()
+
+        return image
+
+    except Exception:
+        bpy.data.images.remove(image)
+        raise
+
+
+def create_checker_material(uv_name, width, height, style="PLAIN"):
     """Create an unassigned UV checker material with 64-pixel squares."""
+    if style not in {key for key, _, _ in CHECKER_STYLES}:
+        raise ValueError(f"Unknown checker style: {style}")
+
     if not uv_name:
         raise ValueError("A UV map name is required")
 
@@ -31,21 +96,36 @@ def create_checker_material(uv_name, width, height):
 
         scale = nodes.new("ShaderNodeVectorMath")
         scale.operation = "MULTIPLY"
+        # The plain checker repeats every square. The direction image
+        # repeats every two squares.
+        repeat_pixels = (
+            CHECKER_SQUARE_PIXELS
+            if style == "PLAIN"
+            else CHECKER_SQUARE_PIXELS * TILE_CELLS
+        )
         scale.inputs[1].default_value = (
-            width / 64.0,
-            height / 64.0,
+            width / repeat_pixels,
+            height / repeat_pixels,
             1.0,
         )
         scale.location = (-400, 0)
 
-        checker = nodes.new("ShaderNodeTexChecker")
-        checker.inputs["Scale"].default_value = 1.0
-        checker.inputs["Color1"].default_value = (
-            0.02, 0.02, 0.02, 1.0,
-        )
-        checker.inputs["Color2"].default_value = (
-            0.8, 0.8, 0.8, 1.0,
-        )
+        if style == "PLAIN":
+            checker = nodes.new("ShaderNodeTexChecker")
+            checker.inputs["Scale"].default_value = 1.0
+            checker.inputs["Color1"].default_value = (
+                0.02, 0.02, 0.02, 1.0,
+            )
+            checker.inputs["Color2"].default_value = (
+                0.8, 0.8, 0.8, 1.0,
+            )
+
+        else:
+            checker = nodes.new("ShaderNodeTexImage")
+            checker.image = create_direction_image()
+            checker.interpolation = "Linear"
+            checker.extension = "REPEAT"
+
         checker.location = (-200, 0)
 
         shader = nodes.new("ShaderNodeBsdfPrincipled")
@@ -64,7 +144,7 @@ def create_checker_material(uv_name, width, height):
 
     except Exception as error:
         error.add_note("GEPrep: failed to create the UV checker material")
-        bpy.data.materials.remove(material)
+        remove_checker_material(material)
         raise
 
 
@@ -201,7 +281,7 @@ def restore_checker_previews(context, *, objects=None):
     for material in materials:
         try:
             if material.users == 0:
-                bpy.data.materials.remove(material)
+                remove_checker_material(material)
 
         except Exception as error:
             errors.append(
@@ -222,6 +302,7 @@ def apply_checker_preview(
     uv_name="",
     width=2048,
     height=2048,
+    style="PLAIN",
 ):
     """Show a checker while recording the original material assignments."""
     if context.mode != "OBJECT":
@@ -289,7 +370,7 @@ def apply_checker_preview(
     stage = "create checker material"
 
     try:
-        checker = create_checker_material(name, width, height)
+        checker = create_checker_material(name, width, height, style)
 
         stage = "record original materials"
         record_started = True
@@ -361,7 +442,7 @@ def apply_checker_preview(
             recovery_stage = "remove unused checker material"
 
             if checker is not None and checker.users == 0:
-                bpy.data.materials.remove(checker)
+                remove_checker_material(checker)
 
         except Exception as recovery_error:
             raise CheckerRecoveryError(
