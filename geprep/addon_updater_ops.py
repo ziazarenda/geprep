@@ -1,3 +1,5 @@
+# Shared kit file (blender-addon-kit). Do not edit here: change it in the kit
+# and run sync_kit.py. Configure it in constants.py (ADDON_ID, GITHUB_USER, ...).
 # ##### BEGIN GPL LICENSE BLOCK #####
 #
 #  This program is free software; you can redistribute it and/or
@@ -26,6 +28,7 @@ import traceback
 
 import bpy
 from bpy.app.handlers import persistent
+from . import constants
 from .vendor.humanize import naturaldelta
 
 # Safely import the updater.
@@ -73,9 +76,17 @@ except Exception as e:
 # not match and have errors. Must be all lowercase and no spaces! Should also
 # be unique among any other addons that could exist (using this updater code),
 # to avoid clashes in operator registration.
-updater.addon = "geprep"
+updater.addon = constants.ADDON_ID
 
 __no_reg__ = True
+
+
+def _version_text(version):
+    """Show (1, 0, 1) as 1.0.1; leave anything else as text."""
+    if isinstance(version, (tuple, list)):
+        return ".".join(str(part) for part in version)
+    return str(version)
+
 
 # -----------------------------------------------------------------------------
 # Blender version utils
@@ -197,7 +208,7 @@ class AddonUpdaterInstallPopup(bpy.types.Operator):
         elif updater.update_ready:
             col = layout.column()
             col.scale_y = 0.7
-            col.label(text="Update {} ready!".format(updater.update_version),
+            col.label(text="Update {} ready!".format(_version_text(updater.update_version)),
                       icon="LOOP_FORWARDS")
             col.label(text="Choose 'Update Now' & press OK to install, ",
                       icon="BLANK1")
@@ -971,12 +982,12 @@ def _draw_update_controls(col, *, condensed):
     elif updater.update_ready and not updater.manual_only:
         _draw_update_button_pair(
             col, AddonUpdaterUpdateNow,
-            "Update now to " + str(updater.update_version), **dimensions)
+            "Update now to " + _version_text(updater.update_version), **dimensions)
 
     elif updater.update_ready and updater.manual_only:
         col.scale_y = dimensions["scale_y"]
         col.operator("wm.url_open",
-                     text="Download " + str(updater.update_version)).url = updater.website
+                     text="Download " + _version_text(updater.update_version)).url = updater.website
     else:  # i.e. that updater.update_ready == False.
         _draw_update_button_pair(
             col, AddonUpdaterCheckNow, "Addon is up to date",
@@ -1189,8 +1200,10 @@ def select_link_function(self, tag):
     """
 
     # -- Default, universal case (and is the only option for GitLab/Bitbucket)
-    link = tag["zipball_url"] # fallback
+    link = tag["zipball_url"]  # fallback
 
+    # Prefer the zip attached to the release: GitHub's source zip nests the
+    # add-on in an extra folder.
     for asset in tag.get("assets", []):
         if asset.get("name", "").endswith(".zip"):
             link = asset["browser_download_url"]
@@ -1252,16 +1265,16 @@ def register(bl_info):
     updater.private_token = None  # "tokenstring"
 
     # Choose your own username, must match website (not needed for GitLab).
-    updater.user = "ziazarenda"
+    updater.user = constants.GITHUB_USER
 
     # Choose your own repository, must match git name for GitHUb and Bitbucket,
     # for GitLab use project ID (numbers only).
-    updater.repo = "geprep"
+    updater.repo = constants.GITHUB_REPO
 
     # updater.addon = # define at top of module, MUST be done first
 
     # Website for manual addon download, optional but recommended to set.
-    updater.website = "https://github.com/ziazarenda/geprep"
+    updater.website = f"https://github.com/{constants.GITHUB_USER}/{constants.GITHUB_REPO}"
 
     # Addon subfolder path.
     # "sample/path/to/addon"
@@ -1277,7 +1290,7 @@ def register(bl_info):
 
     # Optional, consider turning off for production or allow as an option
     # This will print out additional debugging info to the console
-    updater.verbose = False  # make False for production default
+    updater.verbose = False
 
     # Optional, customize where the addon updater processing subfolder is,
     # essentially a staging folder used by the updater on its own
@@ -1359,7 +1372,7 @@ def register(bl_info):
     # Note: updater.include_branch_list defaults to ['master'] branch if set to
     # none. Example targeting another multiple branches allowed to pull from:
     # updater.include_branch_list = ['master', 'dev']
-    updater.include_branch_list = ["main"] # None is the equivalent = ['master']
+    updater.include_branch_list = [constants.GITHUB_BRANCH]
 
     # Only allow manual install, thus prompting the user to open
     # the addon's web page to download, specifically: updater.website

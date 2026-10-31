@@ -1,9 +1,11 @@
+# Shared kit file (blender-addon-kit). Do not edit here: change it in the kit
+# and run sync_kit.py.
 """Run every plain-Python test and print a summary.
 
     python tests/plain/_run_all.py
 
 These tests need no Blender. They load the add-on's logic modules with
-small stand-ins for bpy and mathutils. They need numpy.
+small stand-ins for bpy and mathutils. Add whatever they need (numpy, say) to your dev dependencies.
 """
 import subprocess
 import sys

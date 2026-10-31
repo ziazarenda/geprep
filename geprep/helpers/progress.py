@@ -1,3 +1,5 @@
+# Shared kit file (blender-addon-kit). Do not edit here: change it in the kit
+# and run sync_kit.py.
 """Progress feedback for operators that loop over many objects."""
 
 

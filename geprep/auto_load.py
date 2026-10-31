@@ -1,3 +1,5 @@
+# Shared kit file (blender-addon-kit). Do not edit here: change it in the kit
+# and run sync_kit.py.
 import bpy
 import sys
 import typing
@@ -180,5 +182,9 @@ def toposort(deps_dict):
                 sorted_values.add(value)
             else:
                 unsorted.append(value)
+        if len(unsorted) == len(deps_dict):
+            # Nothing could be placed: the rest depend on each other.
+            names = ", ".join(sorted(value.__name__ for value in unsorted))
+            raise RuntimeError(f"Circular class registration dependency: {names}")
         deps_dict = {value : deps_dict[value] - sorted_values for value in unsorted}
     return sorted_list

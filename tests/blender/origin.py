@@ -1,3 +1,4 @@
+# needs-window
 exec("""
 import itertools
 import uuid

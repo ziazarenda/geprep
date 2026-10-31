@@ -1,3 +1,5 @@
+# Shared kit file (blender-addon-kit). Do not edit here: change it in the kit
+# and run sync_kit.py.
 # ##### BEGIN GPL LICENSE BLOCK #####
 #
 #  This program is free software; you can redistribute it and/or
@@ -133,7 +135,7 @@ def _extract_update_zip(source, destination, log):
                         shutil.copyfileobj(incoming, outgoing)
                     log("Extract - create: " + str(path))
             except Exception as error:
-                error.add_note(f"GEPrep: failed to extract ZIP member {info.orig_filename!r}")
+                error.add_note(f"Updater: failed to extract ZIP member {info.orig_filename!r}")
                 raise
 
 
