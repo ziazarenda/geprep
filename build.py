@@ -352,6 +352,11 @@ def run_blender_tests(addon, zip_path, blender, headless, timeout):
 
             if status != "passed":
                 print(log[-2500:])
+            else:
+                # A passing test can still say something: lines it prints as "INFO: ..."
+                for line in log.splitlines():
+                    if line.startswith("INFO:"):
+                        print(f"    {line}")
 
             results.append((test.name, status, passes, error))
             print(f"    {status.upper()} in {time.time() - started:.1f} s")
