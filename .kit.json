@@ -8,7 +8,7 @@
     "build.py": "52dad9b56f0837a693ac8655e696fac1ae58e71137cca1e6ce0d4342fc8f13a3",
     "geprep/addon_updater.py": "4de3caaa397fc7a5d5fa86112f228d3b67fad49176a32b9d065ab916b345674e",
     "geprep/addon_updater_ops.py": "573e76863c104301820ffbf88a84cdde320348c844a027cc96adb3af34bb343a",
-    "geprep/auto_load.py": "3513b81972e41befe3361798aca42e0a38fd7c85e41a7fd07a6f52c8fa916309",
+    "geprep/auto_load.py": "1683be27a13d7a9c988ebac586e6c6bfc2b425a21ed59185e78b69ef709e1119",
     "geprep/helpers/progress.py": "9154307719ca26e6a034a76abd2a44cab7e251f3806a84a98424bbcb89534374",
     "geprep/vendor/__init__.py": "9cab1100b74f0ccd44229057ba82f4f3d566d121317b43d93eb72d39d0b27851",
     "geprep/vendor/humanize/LICENCE": "8ba6c18112a431400ad3c743f70670079b302545d98884fc2f28a91c383a0380",

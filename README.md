@@ -312,7 +312,7 @@ uv run python build.py     # tests + build, result in dist/
 
 - **humanize**: MIT licence, in `geprep/vendor/humanize/`.
 - **Blender Addon Updater** (CG-Cookie fork): GPL v2 or later, `addon_updater.py` and `addon_updater_ops.py`.
-- **auto_load**: by Jacques Lucke.
+- **auto_load**: MIT licence, from [blender_vscode](https://github.com/JacquesLucke/blender_vscode) by Jacques Lucke (notice in the file header).
 
 ---
 
