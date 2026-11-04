@@ -49,7 +49,7 @@ Some principles apply to every panel:
 - **Checks never change your scene.** Only the buttons that say they change something do, and those support Undo.
 - **Findings are not errors.** A check reports what it found. A finding may be intentional, so you decide.
 - **Work on the selection.** Every action uses the objects you currently have selected.
-- **Results stay visible.** Each action leaves a collapsible report in its panel, and you can click an entry to select and frame that object.
+- **Results stay visible.** Each action leaves a collapsible report in its panel, and the magnifier button on an entry selects and frames that object.
 
 ---
 
@@ -59,8 +59,6 @@ Some principles apply to every panel:
 2. In Blender open **Edit → Preferences → Add-ons**.
 3. Open the drop-down in the top right and choose **Install from Disk…**, then pick the zip.
 4. Enable **GEPrep**.
-
-[image of the Install from Disk menu]
 
 After that, GEPrep can update itself from GitHub; see [Preferences and updates](#preferences-and-updates).
 
@@ -157,11 +155,8 @@ Set the texture size (256 to 8192, or custom width and height), the target densi
   - how much of the tile is covered
 
   Shader tiling is not measured. Click a finding to select the matching faces in Edit Mode.
+  GEPrep then shows them in a UV Editor: it reuses an Image Editor that is already open (one in UV mode first), or opens a new window, and frames the 0–1 tile. For faces outside the tile it frames the selected UVs. Turn this off with **Show UV Editor**.
 - **Set Density** resizes the UV islands to the target density. This can create overlaps or push UVs outside the tile, so repack without rescaling if needed.
-
-**UV Orientation** (Edit Mode)
-
-Select faces and click an arrow to rotate the whole UV islands touched by the selection so that the cyan +U arrow of the direction checker points that way. *Up Axis* decides which direction counts as up (Auto uses world Z on walls and world Y on floors). *Flatness Tolerance* decides how much an island may bend and still be rotated by its average direction. **●** points +U right and +V up, and **Fix Mirroring** flips mirrored islands without rotating them.
 
 **Checker Preview**
 
@@ -170,6 +165,11 @@ Select faces and click an arrow to rotate the whole UV islands touched by the se
 - **Remove Checker** restores the original materials, including their link type (data or object).
 
 [image of the Direction Checker on a mesh]
+
+**UV Orientation** (Edit Mode)
+
+Select faces and click an arrow to rotate the whole UV islands touched by the selection so that the cyan +U arrow of the direction checker points that way. *Up Axis* decides which direction counts as up (Auto uses world Z on walls and world Y on floors). *Flatness Tolerance* decides how much an island may bend and still be rotated by its average direction. **●** points +U right and +V up, and **Fix Mirroring** flips mirrored islands without rotating them.
+
 [gif of the UV orientation arrows]
 
 ### 6. Materials
@@ -180,6 +180,7 @@ Select faces and click an arrow to rotate the whole UV islands touched by the se
   - images that look like copies of another image
   - colour space compared with how the colour is used
   - UV maps used by textures and normal maps
+- **Show Node** (the node-tree button on each texture result) selects the object, makes the material slot active and shows the node in a Shader Editor, entering node groups when needed. It reuses a Shader Editor that is open and not pinned, or opens a new window. If you renamed or deleted the node or material since the check, run **Check Materials** again.
 - **Remove Empty Slots** removes slots that have no material and no faces using them. Filled slots and slots used by faces are always kept.
 
 [image of a material report]
@@ -237,7 +238,7 @@ Every report entry has a status:
 | ⚠ **Failed** | It could not be done. The message says why |
 | ⚠ **Recovery Failed** | A change was interrupted and could not be undone automatically. Use Blender's Undo |
 
-Click an entry's name to select it and frame it in the viewport.
+Click the magnifier button on an entry to select that object and frame it in the viewport. Click the entry's name to open or close its details.
 
 ---
 
@@ -272,7 +273,8 @@ geprep/                      the add-on (this is what ends up in the zip)
 │   └── naming.py, prepare.py, modifiers.py, mesh.py, uv.py,
 │       materials.py, origin.py, export.py
 │
-├── helpers/                 small shared utilities (object lookups, progress)
+├── helpers/                 small shared utilities (object lookups, progress,
+│                            finding or opening editors, finding nodes again)
 ├── resources/icons/         icons used by the add-on
 └── vendor/humanize/         third-party library (see below)
 ```
@@ -303,8 +305,6 @@ tests/blender/  tests that run inside Blender
 ```bash
 uv run python build.py     # tests + build, result in dist/
 ```
-
-[image of a passing build in the terminal]
 
 ---
 

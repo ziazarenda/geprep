@@ -41,6 +41,7 @@ def load(module_name, relative_path):
 
 
 helpers = load("geprep.helpers.objects", "helpers/objects.py")
+load("geprep.helpers.node_chain", "helpers/node_chain.py")
 mat = load("geprep.operations.materials", "operations/materials.py")
 
 

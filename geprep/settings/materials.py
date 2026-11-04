@@ -13,6 +13,7 @@ class GEPREP_PG_texture_check(bpy.types.PropertyGroup):
     )
     message: bpy.props.StringProperty()
     node_path: bpy.props.StringProperty()
+    node_chain: bpy.props.StringProperty()
     width: bpy.props.IntProperty(min=0)
     height: bpy.props.IntProperty(min=0)
     color_space: bpy.props.StringProperty()

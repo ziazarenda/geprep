@@ -2,6 +2,7 @@ import traceback
 
 import bpy
 
+from ..helpers.editors import show_uv_editor
 from ..helpers.objects import (
     find_object_by_key,
     has_selected_mesh,
@@ -299,11 +300,22 @@ class GEPREP_OT_select_uv_finding(bpy.types.Operator):
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
 
-        self.report(
-            {"INFO"},
+        message = (
             f"Selected {len(indices)} faces. "
-            "Return to Object Mode to select another finding",
+            "Return to Object Mode to select another finding"
         )
+
+        if settings.uv_open_editor:
+            try:
+                show_uv_editor(
+                    context,
+                    frame_selected=self.finding == "outside_tile",
+                )
+            except Exception as error:
+                traceback.print_exc()
+                message += f". The UV Editor could not be shown: {error}"
+
+        self.report({"INFO"}, message)
         return {"FINISHED"}
 
 

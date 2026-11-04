@@ -193,7 +193,9 @@ def draw_result_item_header(
     return item, expanded
 
 
-def draw_nested_result_header(layout, context, section, index, title, status):
+def draw_nested_result_header(
+    layout, context, section, index, title, status, extra=None
+):
     """Draw a lighter foldout header for a result inside a result card."""
     row = layout.row(align=True)
 
@@ -213,5 +215,8 @@ def draw_nested_result_header(layout, context, section, index, title, status):
         text=RESULT_STATUS_LABELS.get(status, status.capitalize()),
         icon=RESULT_STATUS_ICONS.get(status, "NONE"),
     )
+
+    if extra is not None:
+        extra(status_row)
 
     return expanded

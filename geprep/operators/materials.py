@@ -74,6 +74,7 @@ def run_material_check(context, objects):
                     "status",
                     "message",
                     "node_path",
+                    "node_chain",
                     "width",
                     "height",
                     "color_space",

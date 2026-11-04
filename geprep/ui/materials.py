@@ -1,5 +1,6 @@
 import bpy
 
+from ..helpers.objects import pointer_key
 from .common import (
     INPUT_SCALE_Y,
     draw_action_button,
@@ -11,7 +12,29 @@ from .common import (
 )
 
 
-def draw_texture_result(layout, context, texture, index):
+def draw_node_button(row, context, obj, material, texture):
+    """Add the 'show this node in a Shader Editor' button to a texture row."""
+    row.separator(factor=1.6)
+
+    button_row = row.row(align=True)
+    button_row.enabled = (
+        context.mode == "OBJECT"
+        and obj is not None
+        and bool(texture.node_chain)
+    )
+
+    button = button_row.operator(
+        "geprep.inspect_node",
+        text="",
+        icon="NODETREE",
+    )
+    button.object_key = pointer_key(obj)
+    button.slot = material.slot
+    button.material = material.name
+    button.node_chain = texture.node_chain
+
+
+def draw_texture_result(layout, context, texture, index, obj, material):
     box = layout.box()
     box.alert = texture.status == "FAILED"
 
@@ -22,6 +45,7 @@ def draw_texture_result(layout, context, texture, index):
         index,
         texture.name,
         texture.status,
+        extra=lambda row: draw_node_button(row, context, obj, material, texture),
     ):
         return
 
@@ -48,7 +72,7 @@ def draw_texture_result(layout, context, texture, index):
         draw_multiline_message(box, context, f"Path: {texture.filepath}", 96)
 
 
-def draw_material_slot_result(layout, context, material, index):
+def draw_material_slot_result(layout, context, material, index, obj):
     box = layout.box()
     box.alert = material.status == "FAILED"
 
@@ -71,6 +95,8 @@ def draw_material_slot_result(layout, context, material, index):
             context,
             texture,
             f"{index}.{texture_index}",
+            obj,
+            material,
         )
 
 
@@ -120,6 +146,7 @@ def draw_material_results(layout, settings, context):
                 context,
                 material,
                 f"{index}.{material_index}",
+                entry.object_ref,
             )
 
 

@@ -263,6 +263,7 @@ class GEPREP_PT_uv(bpy.types.Panel):
                 col.prop(settings, "uv_target_density")
 
             col.prop(settings, "uv_tolerance")
+            col.prop(settings, "uv_open_editor")
 
             col = density_box.column()
             col.scale_y = BUTTON_SCALE_Y
@@ -280,8 +281,6 @@ class GEPREP_PT_uv(bpy.types.Panel):
         draw_uv_results(layout, settings, context)
         draw_uv_density_results(layout, settings, context)
 
-        draw_uv_orientation(layout, settings, context)
-
         checker_box = layout.box()
         checker_box.label(text="Checker Preview")
         col = checker_box.column()
@@ -297,3 +296,5 @@ class GEPREP_PT_uv(bpy.types.Panel):
             text="Remove Checker",
         )
         checker_box.label(text="Direction Checker: cyan +U, orange +V")
+
+        draw_uv_orientation(layout, settings, context)

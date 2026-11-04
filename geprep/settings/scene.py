@@ -161,6 +161,15 @@ class GEPREP_PG_settings(bpy.types.PropertyGroup):
     )
 
     # UV
+    uv_open_editor: bpy.props.BoolProperty(
+        name="Show UV Editor",
+        description=(
+            "After selecting the faces of a finding, show them in a UV Editor. "
+            "Uses an open one, or opens a new window"
+        ),
+        default=True,
+    )
+
     uv_map_name: bpy.props.StringProperty(
         name="UV Map",
         description="Leave empty to use each object's active UV map",

@@ -10,6 +10,7 @@ from array import array
 
 import bpy
 
+from ..helpers.node_chain import encode_chain
 from ..helpers.objects import restore_material_links
 
 STATUS_PRIORITY = {"FAILED": 0, "INSPECT": 1, "PASSED": 2}
@@ -494,6 +495,7 @@ def inspect_texture_node(
             status="INSPECT",
             message=f"Node '{node.name}' has no image assigned",
             node_path=path,
+            node_chain=encode_chain(parents, node),
             width=0,
             height=0,
             color_space="",
@@ -536,6 +538,7 @@ def inspect_texture_node(
         status=status,
         message=message,
         node_path=path,
+        node_chain=encode_chain(parents, node),
         width=details["width"],
         height=details["height"],
         color_space=details["color_space"],
