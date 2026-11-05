@@ -3,7 +3,7 @@
 bl_info = {
     "name": "GEPrep",
     "author": "ziazarenda",
-    "version": (1, 0, 2),
+    "version": (1, 0, 3),
     "blender": (5, 2, 2),
     "location": "View3D > Sidebar > GEPrep",
     "description": "Prepare game environment assets",
@@ -23,6 +23,6 @@ def register():
 
 
 def unregister():
-    addon_updater_ops.unregister()
     auto_load.unregister()
+    addon_updater_ops.unregister()
 

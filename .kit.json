@@ -1,6 +1,7 @@
 {
   "extras": [
     "auto_load",
+    "lifecycle",
     "progress",
     "updater"
   ],
@@ -8,7 +9,7 @@
     "build.py": "52dad9b56f0837a693ac8655e696fac1ae58e71137cca1e6ce0d4342fc8f13a3",
     "geprep/addon_updater.py": "4de3caaa397fc7a5d5fa86112f228d3b67fad49176a32b9d065ab916b345674e",
     "geprep/addon_updater_ops.py": "573e76863c104301820ffbf88a84cdde320348c844a027cc96adb3af34bb343a",
-    "geprep/auto_load.py": "1683be27a13d7a9c988ebac586e6c6bfc2b425a21ed59185e78b69ef709e1119",
+    "geprep/auto_load.py": "103d41af0bce63bbd58f063d79451b5803a6e306a9d448898b3f6029a770a4d8",
     "geprep/helpers/progress.py": "9154307719ca26e6a034a76abd2a44cab7e251f3806a84a98424bbcb89534374",
     "geprep/vendor/__init__.py": "9cab1100b74f0ccd44229057ba82f4f3d566d121317b43d93eb72d39d0b27851",
     "geprep/vendor/humanize/LICENCE": "8ba6c18112a431400ad3c743f70670079b302545d98884fc2f28a91c383a0380",
@@ -20,6 +21,7 @@
     "geprep/vendor/humanize/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "geprep/vendor/humanize/time.py": "93c836497d8e3267618a5bffc488f91b88e19f0efc8f2758b5d748b74a7bb173",
     "tests/blender/_run_in_blender.py": "b113ab737611b9ec986e274810d05a30466f7af078e89fbaa1c8eef08dfae7e2",
+    "tests/blender/lifecycle.py": "a37564193b99de66e364088abbf7dc9ecf8e48420807dbf3f276493fa1412038",
     "tests/plain/_run_all.py": "096d1f5fcbcae151d7a6f54235346e69044404ebed27908c861b70c314f11b05"
   }
 }

@@ -3,6 +3,7 @@ import traceback
 import bpy
 
 from ..helpers.objects import has_selected_mesh, selected_meshes
+from ..helpers.progress import with_progress
 from ..operations.materials import (
     MaterialSlotCommitError,
     inspect_object_materials,
@@ -29,7 +30,7 @@ def run_material_check(context, objects):
     image_cache = {}
     image_names = frozenset(image.name for image in bpy.data.images)
 
-    for obj in objects:
+    for obj in with_progress(context, objects):
         entry = results.add()
         entry.object_ref = obj
         entry.object_name = obj.name
