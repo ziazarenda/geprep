@@ -126,7 +126,7 @@ Objects that cannot be changed safely are skipped with a reason: library data or
 - Non-manifold vertices
 - Winding conflicts
 
-*Check Distance* sets how close counts as "nearby". Its square is the small-face area threshold. Click a finding to select the matching geometry in Edit Mode (hidden elements are revealed). **Zoom to selection** and **X-Ray** options help you see it.
+**Check Distance** sets how close counts as "nearby". Its square is the small-face area threshold. Click a finding to select the matching geometry in Edit Mode (hidden elements are revealed). **Zoom to selection** and **X-Ray** options help you see it.
 
 **Mesh Fixes.** One button per fix, each working on the selected objects and supporting Undo:
 
