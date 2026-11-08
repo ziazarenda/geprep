@@ -3,8 +3,8 @@
 bl_info = {
     "name": "GEPrep",
     "author": "ziazarenda",
-    "version": (1, 0, 3),
-    "blender": (5, 2, 2),
+    "version": (1, 0, 4),
+    "blender": (5, 2, 0),
     "location": "View3D > Sidebar > GEPrep",
     "description": "Prepare game environment assets",
     "category": "Object",

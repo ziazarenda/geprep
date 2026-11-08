@@ -2,9 +2,9 @@
 
 Prepare game environment assets in Blender: rename, copy, clean up, check, fix and export meshes as GLB without leaving the 3D Viewport sidebar.
 
-> **Blender 5.2.2 or newer.** GEPrep adds a **GEPrep** tab to the sidebar of the 3D Viewport (press `N`).
+> **Blender 5.2 or newer.** GEPrep adds a **GEPrep** tab to the sidebar of the 3D Viewport (press `N`).
 
-[image of the GEPrep tab with all panels collapsed]
+![GEPrep tab with all panels collapsed](docs/images/geprep_tab.webp)
 
 ---
 
@@ -56,11 +56,11 @@ Some principles apply to every panel:
 ## Installation
 
 1. Download the latest `geprep-x.y.z.zip` from the [Releases](../../releases) page.
-2. In Blender open **Edit → Preferences → Add-ons**.
+2. In Blender open **Edit > Preferences > Add-ons**.
 3. Open the drop-down in the top right and choose **Install from Disk…**, then pick the zip.
 4. Enable **GEPrep**.
 
-After that, GEPrep can update itself from GitHub; see [Preferences and updates](#preferences-and-updates).
+After that, GEPrep can update itself from GitHub, see [Preferences and updates](#preferences-and-updates).
 
 ---
 
@@ -78,7 +78,7 @@ Rename the selected objects.
 
 Names that would collide are numbered so every object keeps a unique name, and a rename that would leave a name empty is refused.
 
-[image or gif of renaming a few objects]
+![Renaming several selected objects with Set New Name and Find & Replace](docs/images/renaming_a_few_objects.gif)
 
 ### 2. Prepare
 
@@ -97,7 +97,7 @@ Creates **prepared copies** of your objects so the originals stay untouched.
 
 The report under the buttons lists each object as *Prepared*, *Restored*, *Skipped* or *Failed*.
 
-[image or gif of Prepare Copy and Remove Prepared Copies]
+![Prepare Copy and Remove Prepared Copies](docs/images/prepare_copy.gif)
 
 ### 3. Modifiers
 
@@ -107,7 +107,7 @@ Shows a preview of every selected object's modifier stack, with a note for modif
 
 Objects that cannot be changed safely are skipped with a reason: library data or overrides, meshes with shape keys, animated objects and meshes, and node setups that use simulation zones.
 
-[image of the modifier preview]
+![Modifier stack preview in the Modifiers panel](docs/images/modifier_preview.gif)
 
 ### 4. Mesh
 
@@ -137,8 +137,9 @@ Objects that cannot be changed safely are skipped with a reason: library data or
 
 Merging and dissolving can change faces, UVs and seams, so check the result.
 
-[image of a mesh check report]
-[gif of selecting a finding in Edit Mode]
+![Running Geometry Check and selecting a finding in Edit Mode](docs/images/mesh_check.gif)
+![Applying mesh fixes to the selected objects](docs/images/mesh_cleanup.gif)
+
 
 ### 5. UV
 
@@ -146,44 +147,43 @@ Merging and dissolving can change faces, UVs and seams, so check the result.
 
 Set the texture size (256 to 8192, or custom width and height), the target density in pixels per metre (128 to 4096, or custom) and a tolerance in percent. Choose a UV map, or leave it empty to use each object's active one.
 
-- **Check UVs** reports, per object and UV map:
-  - the measured density and how many islands are outside the target
-  - faces outside the 0–1 tile
-  - overlapping UV faces (estimated on a 512 × 512 grid)
-  - collapsed UV faces and degenerate mesh faces
-  - mirrored UV faces
-  - how much of the tile is covered
+**Check UVs** reports, per object and UV map:
+- the measured density and how many islands are outside the target
+- faces outside the 0–1 tile
+- overlapping UV faces (estimated on a 512 × 512 grid)
+- collapsed UV faces and degenerate mesh faces
+- mirrored UV faces
+- how much of the tile is covered
 
-  Shader tiling is not measured. Click a finding to select the matching faces in Edit Mode.
-  GEPrep then shows them in a UV Editor: it reuses an Image Editor that is already open (one in UV mode first), or opens a new window, and frames the 0–1 tile. For faces outside the tile it frames the selected UVs. Turn this off with **Show UV Editor**.
-- **Set Density** resizes the UV islands to the target density. This can create overlaps or push UVs outside the tile, so repack without rescaling if needed.
+> Shader tiling is not measured. Click any reported finding to select the matching faces in Edit Mode. GEPrep will frame them in the UV Editor (toggle this behavior with **Show UV Editor**).
+
+**Set Density** resizes the UV islands to the target density. This can create overlaps or push UVs outside the tile, so repack without rescaling if needed.
 
 **Checker Preview**
-
 - **Checker** shows a 64-pixel UV checker on the selected objects.
 - **Direction Checker** adds a cyan +U arrow and an orange +V arrow in every square, which makes rotation and mirroring easy to see.
 - **Remove Checker** restores the original materials, including their link type (data or object).
-
-[image of the Direction Checker on a mesh]
 
 **UV Orientation** (Edit Mode)
 
 Select faces and click an arrow to rotate the whole UV islands touched by the selection so that the cyan +U arrow of the direction checker points that way. *Up Axis* decides which direction counts as up (Auto uses world Z on walls and world Y on floors). *Flatness Tolerance* decides how much an island may bend and still be rotated by its average direction. **●** points +U right and +V up, and **Fix Mirroring** flips mirrored islands without rotating them.
 
-[gif of the UV orientation arrows]
+![Checking UVs, applying the direction checker, and rotating islands with UV Orientation](docs/images/uv.gif)
 
 ### 6. Materials
 
-- **Check Materials** makes no changes. For every selected mesh it checks the material slots and every image texture, including those inside node groups:
-  - missing files or paths, unloaded or unsaved images
-  - texture size above *Max Texture Size*, and non-power-of-two sizes
-  - images that look like copies of another image
-  - colour space compared with how the colour is used
-  - UV maps used by textures and normal maps
-- **Show Node** (the node-tree button on each texture result) selects the object, makes the material slot active and shows the node in a Shader Editor, entering node groups when needed. It reuses a Shader Editor that is open and not pinned, or opens a new window. If you renamed or deleted the node or material since the check, run **Check Materials** again.
-- **Remove Empty Slots** removes slots that have no material and no faces using them. Filled slots and slots used by faces are always kept.
+**Check Materials** makes no changes. For every selected mesh it checks the material slots and every image texture, including those inside node groups:
+- missing files or paths, unloaded or unsaved images
+- texture size above *Max Texture Size*, and non-power-of-two sizes
+- images that look like copies of another image
+- colour space compared with how the colour is used
+- UV maps used by textures and normal maps
 
-[image of a material report]
+**Show Node** (the node-tree button on each texture result) selects the object, makes the material slot active and shows the node in a Shader Editor, entering node groups when needed. If you renamed or deleted the node or material since the check, run **Check Materials** again.
+
+**Remove Empty Slots** removes slots that have no material and no faces using them. Filled slots and slots used by faces are always kept.
+
+![Material report listing texture findings, with Show Node jumping to a node](docs/images/materials.gif)
 
 ### 7. Origin
 
@@ -193,7 +193,7 @@ Move origins without moving the mesh.
 - **Depth** (*Front*, *Center*, *Back*) chooses where along the Y axis. In the front view the front is the lowest Y.
 - **Origin to 3D Cursor** moves the origin to the cursor.
 
-[image or gif of the origin grid]
+![Setting the origin of several objects from the 3 × 3 bounding box grid](docs/images/set_origin.gif)
 
 ### 8. Export
 
@@ -210,19 +210,19 @@ Writes the selected meshes to GLB (Y up, scene unit scale applied).
 
 File names are made safe for the file system. The report lists every written file with its path.
 
-[image of the export panel and report]
+![The Export panel with folder, mode and file options](docs/images/export_panel.webp)
 
 ---
 
 ## Preferences and updates
 
-Open **Edit → Preferences → Add-ons → GEPrep**.
+Open **Edit > Preferences > Add-ons > GEPrep**.
 
 - **Default Export Folder:** folder used for exported assets.
 - **Updater:** check for updates now, or automatically every set number of months, days, hours and minutes (default: weekly). When a newer release exists, GEPrep offers to install it.
 - **GitHub Repository** button opens this page.
 
-[image of the preferences panel]
+![GEPrep preferences](docs/images/preferences_panel.webp)
 
 ---
 
@@ -311,11 +311,10 @@ uv run python build.py     # tests + build, result in dist/
 ## Third-party code
 
 - **humanize**: MIT licence, in `geprep/vendor/humanize/`.
-- **Blender Addon Updater** (CG-Cookie fork): GPL v2 or later, `addon_updater.py` and `addon_updater_ops.py`.
-- **auto_load**: MIT licence, from [blender_vscode](https://github.com/JacquesLucke/blender_vscode) by Jacques Lucke (notice in the file header).
+- **Blender Addon Updater** (GPL v2 or later) and **auto_load** (MIT, from [blender_vscode](https://github.com/JacquesLucke/blender_vscode) by Jacques Lucke) come from [blender-addon-kit](https://github.com/ziazarenda/blender-addon-kit). Their notices are in the file headers.
 
 ---
 
 ## Licence
 
-See the `LICENSE` file.
+GPL v3, see the `LICENSE` file.
