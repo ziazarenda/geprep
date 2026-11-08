@@ -5,6 +5,7 @@ Prepare game environment assets in Blender: rename, copy, clean up, check, fix a
 > **Blender 5.2 or newer.** Adds a **GEPrep** tab to the sidebar of the 3D Viewport.
 
 <p align="center">
+  <br>
   <img src="docs/images/geprep_tab.webp" alt="GEPrep tab with all panels collapsed">
 </p>
 
