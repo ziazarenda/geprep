@@ -2,9 +2,11 @@
 
 Prepare game environment assets in Blender: rename, copy, clean up, check, fix and export meshes as GLB without leaving the 3D Viewport sidebar.
 
-> **Blender 5.2 or newer.** GEPrep adds a **GEPrep** tab to the sidebar of the 3D Viewport (press `N`).
+> **Blender 5.2 or newer.** GEPrep adds a **GEPrep** tab to the sidebar of the 3D Viewport (press **N**).
 
-![GEPrep tab with all panels collapsed](docs/images/geprep_tab.webp)
+<p align="center">
+  <img src="docs/images/geprep_tab.webp" alt="GEPrep tab with all panels collapsed">
+</p>
 
 ---
 
